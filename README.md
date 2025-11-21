@@ -9,16 +9,20 @@ A cross-platform GUI app (Go + Fyne) that creates a local podcast server from yo
 - **Playlist Management**: Reorder with arrow buttons, alphabetize, or clear all
 - **Local Server**: RSS feed on port 8080 with one-click URL copying
 - **Safe**: Original files never modified (copies to temp directory)
-- **Cross-platform**: macOS and Linux
+- **Cross-platform**: macOS, Linux, and Windows
 
 ## Quick Start
 
+**macOS/Linux:**
 ```bash
-# Build
 go build -o podcasterator
-
-# Run
 ./podcasterator
+```
+
+**Windows:**
+```powershell
+go build -ldflags "-H windowsgui" -o podcasterator.exe
+.\podcasterator.exe
 ```
 
 ## Usage
@@ -53,9 +57,11 @@ go build -o podcasterator
   - **Linux**:
     - **X11 (basic)**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
     - **Wayland (recommended)**: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols` (Debian/Ubuntu)
+  - **Windows**: GCC compiler (MinGW-w64)
 
 ### Build Commands
 
+**macOS/Linux:**
 ```bash
 # Standard build
 go build -o podcasterator
@@ -63,6 +69,56 @@ go build -o podcasterator
 # Optimized build (smaller binary)
 go build -ldflags="-s -w" -o podcasterator
 ```
+
+**Windows:**
+```powershell
+# Standard build (hides console window)
+$env:CC = "gcc"
+go build -ldflags "-H windowsgui" -o podcasterator.exe
+
+# Optimized build
+$env:CC = "gcc"
+go build -ldflags "-H windowsgui -s -w" -o podcasterator.exe
+```
+
+**Note:** The `-H windowsgui` flag prevents a console window from appearing when launching the app on Windows.
+
+## Windows Setup
+
+To compile Fyne applications on Windows, you need a GCC compiler:
+
+### Install MinGW-w64 via Chocolatey
+
+1. **Open PowerShell as Administrator** (Right-click → Run as Administrator)
+
+2. **Install Chocolatey** (if not already installed):
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+```
+
+3. **Install MinGW**:
+```powershell
+choco install mingw -y
+```
+
+4. **Close and reopen PowerShell** (to update PATH)
+
+5. **Set the C compiler** (in each new PowerShell session, or add to your profile):
+```powershell
+$env:CC = "gcc"
+```
+
+6. **Build the app**:
+```powershell
+cd path\to\podcasterator
+go build -ldflags "-H windowsgui" -o podcasterator.exe
+```
+
+### Alternative: TDM-GCC (GUI Installer)
+
+Download and install from: https://jmeubank.github.io/tdm-gcc/download/
+
+After installation, restart PowerShell and build as shown above.
 
 ## Linux Compatibility
 
