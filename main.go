@@ -136,7 +136,7 @@ func (p *Podcasterator) createUI() {
 	title.TextStyle.Bold = true
 
 	// Drop zone
-	dropZoneLabel := widget.NewLabelWithStyle("Drag audio files or artwork here\nOr click to select. Originals are not modified.",
+	dropZoneLabel := widget.NewLabelWithStyle("Drag audio files or artwork here\n\n📁 Click anywhere here to select files\n(Originals are not modified)",
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	dropZone := widget.NewButton("", func() {
 		p.openFileDialog()
@@ -291,10 +291,18 @@ func (p *Podcasterator) createUI() {
 	p.window.SetContent(content)
 
 	// Set up drag and drop
-	p.window.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
+	p.window.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+		// Debug logging for drag-and-drop events
+		fmt.Printf("Drag-and-drop event received at position %v with %d item(s)\n", pos, len(uris))
+
 		for _, uri := range uris {
 			path := uri.Path()
+			fmt.Printf("  Processing dropped file: %s\n", path)
 			p.handleDroppedPath(path)
+		}
+
+		if len(uris) == 0 {
+			fmt.Println("  Warning: Drop event received but no URIs provided")
 		}
 	})
 }
@@ -317,17 +325,55 @@ func (p *Podcasterator) handleDroppedPath(path string) {
 }
 
 func (p *Podcasterator) openFileDialog() {
-	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
-		if err != nil || reader == nil {
-			return
-		}
-		defer reader.Close()
+	// Create a custom dialog with options for files or folders
+	fileBtn := widget.NewButton("Select Audio Files", func() {
+		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
 
-		path := reader.URI().Path()
-		if isSupportedFile(path) {
-			p.addFile(path)
-		}
-	}, p.window)
+			path := reader.URI().Path()
+			if isSupportedFile(path) {
+				p.addFile(path)
+			} else if isImageFile(path) {
+				p.setArtwork(path)
+			}
+		}, p.window)
+	})
+
+	folderBtn := widget.NewButton("Select Folder", func() {
+		dialog.ShowFolderOpen(func(folder fyne.ListableURI, err error) {
+			if err != nil || folder == nil {
+				return
+			}
+			p.addFolder(folder.Path())
+		}, p.window)
+	})
+
+	imageBtn := widget.NewButton("Select Artwork", func() {
+		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			defer reader.Close()
+
+			path := reader.URI().Path()
+			if isImageFile(path) {
+				p.setArtwork(path)
+			}
+		}, p.window)
+	})
+
+	content := container.NewVBox(
+		widget.NewLabel("Choose what to add:"),
+		fileBtn,
+		folderBtn,
+		imageBtn,
+	)
+
+	d := dialog.NewCustom("Add Files", "Cancel", content, p.window)
+	d.Show()
 }
 
 func (p *Podcasterator) addFile(path string) {
