@@ -53,7 +53,7 @@ go build -o podcasterator
   - **Linux**:
     - **X11 (basic)**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
     - **Wayland (recommended)**: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols` (Debian/Ubuntu)
-    - **WSL**: Works on Windows via WSL2 with native Linux GUI support
+    - **WSL**: Works on Windows via WSL2 with native Linux GUI support (note: drag-and-drop may not work)
 
 ### Build Commands
 
@@ -65,9 +65,20 @@ go build -o podcasterator
 go build -ldflags="-s -w" -o podcasterator
 ```
 
+## Linux Compatibility
+
+**Tested Platform**: KDE Plasma (Wayland) - Full functionality confirmed
+
+**Known Limitations**:
+- **Some Wayland compositors** (e.g., Niri) may not launch the application
+- **Cosmic Desktop**: Application launches but drag-and-drop not supported (compositor limitation)
+- **WSL**: Launches but drag-and-drop may not work reliably
+
+**Workaround**: Use the click-to-select file picker (click the drop zone) which works on all platforms.
+
 ## Wayland Support (Linux)
 
-Podcasterator now includes automatic Wayland detection and configuration. The application should work on pure Wayland compositors (Niri, Sway, etc.) and Wayland sessions with XWayland support (Cosmic Desktop, GNOME, KDE).
+Podcasterator includes automatic Wayland detection and configuration.
 
 ### Automatic Configuration
 
@@ -87,16 +98,17 @@ chmod +x launch_wayland.sh
 
 ### Drag-and-Drop on Wayland
 
-**Known Issue**: Drag-and-drop does **not currently work on Cosmic Desktop** due to incomplete Wayland drag-and-drop protocol implementation in the compositor itself (tracked in Cosmic Desktop issue #1175). This is a Cosmic Desktop limitation, not an issue with Podcasterator.
+**Known Issues**: Drag-and-drop functionality depends on the Wayland compositor's implementation:
 
-**Status by Compositor**:
-- ✅ **GNOME (Mutter)**: Drag-and-drop works
-- ✅ **KDE Plasma (KWin)**: Drag-and-drop works
-- ✅ **Sway/Hyprland**: Drag-and-drop works
-- ❌ **Cosmic Desktop**: Drag-and-drop not yet implemented (as of December 2024)
-- ❌ **Niri**: May have limited support
+**Status by Environment**:
+- ✅ **KDE Plasma (KWin)**: Drag-and-drop works (tested and confirmed)
+- ✅ **GNOME (Mutter)**: Should work
+- ✅ **Sway/Hyprland**: Should work
+- ❌ **Cosmic Desktop**: Drag-and-drop not supported (compositor limitation - tracked in issue #1175)
+- ❌ **Niri**: May not launch or may have limited support
+- ⚠️ **WSL**: Application launches but drag-and-drop may not work reliably
 
-**Workaround for Cosmic Desktop**: Use the click-to-select method instead:
+**Workaround**: Use the click-to-select method instead:
 1. Click on the drop zone area in the app
 2. Use the file picker dialog to select audio files or images
 3. The file dialog uses XDG Desktop Portal and works reliably on all Wayland compositors
