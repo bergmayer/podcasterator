@@ -50,7 +50,9 @@ go build -o podcasterator
 - Go 1.21+
 - Platform-specific dependencies:
   - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
+  - **Linux**:
+    - **X11 (basic)**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
+    - **Wayland (recommended)**: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols` (Debian/Ubuntu)
     - **WSL**: Works on Windows via WSL2 with native Linux GUI support
 
 ### Build Commands
@@ -62,6 +64,66 @@ go build -o podcasterator
 # Optimized build (smaller binary)
 go build -ldflags="-s -w" -o podcasterator
 ```
+
+## Wayland Support (Linux)
+
+Podcasterator now includes automatic Wayland detection and configuration. The application should work on pure Wayland compositors (Niri, Sway, etc.) and Wayland sessions with XWayland support (Cosmic Desktop, GNOME, KDE).
+
+### Automatic Configuration
+
+The application automatically detects Wayland sessions and configures the GLFW backend accordingly. This happens transparently when you run the app.
+
+### Manual Launch (Alternative)
+
+If you experience issues, use the provided launch script:
+
+```bash
+# Make the script executable (first time only)
+chmod +x launch_wayland.sh
+
+# Launch the app
+./launch_wayland.sh
+```
+
+### Drag-and-Drop on Wayland
+
+**Known Issue**: Native drag-and-drop may not work reliably on all Wayland compositors due to GLFW/Wayland protocol limitations.
+
+**Workaround**: Use the click-to-select method instead:
+1. Click on the drop zone area in the app
+2. Use the file picker dialog to select audio files or images
+3. The file dialog uses XDG Desktop Portal and works reliably on Wayland
+
+### Build Requirements for Wayland
+
+Ensure you have the necessary Wayland development libraries:
+
+```bash
+# Debian/Ubuntu/Mint
+sudo apt install libwayland-dev libxkbcommon-dev wayland-protocols
+
+# Fedora/RHEL
+sudo dnf install wayland-devel libxkbcommon-devel wayland-protocols-devel
+
+# Arch Linux
+sudo pacman -S wayland libxkbcommon wayland-protocols
+```
+
+### Troubleshooting Wayland
+
+**App doesn't launch:**
+- Ensure GLFW is built with Wayland support (dependencies should handle this automatically)
+- Try the launch script: `./launch_wayland.sh`
+- Check environment variables: `echo $WAYLAND_DISPLAY $XDG_SESSION_TYPE`
+
+**Drag-and-drop doesn't work:**
+- This is a known limitation on some Wayland compositors
+- Use the click-to-select method instead (click the drop zone)
+- The file picker dialog uses XDG Desktop Portal and should work
+
+**App window issues:**
+- Some Wayland compositors handle window decorations differently
+- If the window appears incorrectly, try running with X11 fallback: `GDK_BACKEND=x11 ./podcasterator`
 
 ## File Locations
 

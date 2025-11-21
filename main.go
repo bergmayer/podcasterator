@@ -78,6 +78,9 @@ type Podcasterator struct {
 }
 
 func main() {
+	// Configure Wayland support for Linux
+	setupWaylandSupport()
+
 	a := app.NewWithID("com.podcasterator.app")
 	p := &Podcasterator{
 		app:         a,
@@ -807,6 +810,35 @@ func (p *Podcasterator) loadState() {
 }
 
 // Helper functions
+
+func setupWaylandSupport() {
+	// Check if running on Wayland
+	waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+	sessionType := os.Getenv("XDG_SESSION_TYPE")
+
+	// If on Wayland, ensure GLFW uses the Wayland backend
+	if waylandDisplay != "" || sessionType == "wayland" {
+		// Set SDL/GLFW environment variables for Wayland support
+		if os.Getenv("GDK_BACKEND") == "" {
+			os.Setenv("GDK_BACKEND", "wayland,x11")
+		}
+
+		// Prefer Wayland for Qt applications (if any dependencies use Qt)
+		if os.Getenv("QT_QPA_PLATFORM") == "" {
+			os.Setenv("QT_QPA_PLATFORM", "wayland;xcb")
+		}
+
+		// Set GLFW to use Wayland if not already set
+		if os.Getenv("GLFW_PLATFORM") == "" {
+			os.Setenv("GLFW_PLATFORM", "wayland")
+		}
+
+		// Disable client-side decorations for better Wayland compatibility
+		// if os.Getenv("FYNE_THEME") == "" {
+		// 	os.Setenv("FYNE_THEME", "light")
+		// }
+	}
+}
 
 func truncateFilename(name string) string {
 	if len(name) > maxFilenameLength {
