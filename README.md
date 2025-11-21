@@ -49,155 +49,42 @@ go build -ldflags "-H windowsgui" -o podcasterator.exe
 
 ## Building
 
+**Tested and built on:** Linux, macOS, and Windows
+
 ### Requirements
 
-- Go 1.21+
-- Platform-specific dependencies:
-  - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux**:
-    - **X11 (basic)**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
-    - **Wayland (recommended)**: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols` (Debian/Ubuntu)
-  - **Windows**: GCC compiler (MinGW-w64)
+- **Go** 1.21+
+- **C Compiler**:
+  - macOS: Xcode Command Line Tools
+  - Linux: GCC (via build-essential or equivalent)
+  - Windows: MinGW-w64 (via Chocolatey: `choco install mingw`)
 
 ### Build Commands
 
 **macOS/Linux:**
 ```bash
-# Standard build
 go build -o podcasterator
-
-# Optimized build (smaller binary)
-go build -ldflags="-s -w" -o podcasterator
 ```
 
 **Windows:**
 ```powershell
-# Standard build (hides console window)
 $env:CC = "gcc"
 go build -ldflags "-H windowsgui" -o podcasterator.exe
-
-# Optimized build
-$env:CC = "gcc"
-go build -ldflags "-H windowsgui -s -w" -o podcasterator.exe
 ```
 
-**Note:** The `-H windowsgui` flag prevents a console window from appearing when launching the app on Windows.
+## Platform Notes
 
-## Windows Setup
+### Linux
 
-To compile Fyne applications on Windows, you need a GCC compiler:
+**Tested and works on:** KDE Plasma (Wayland)
 
-### Install MinGW-w64 via Chocolatey
+**Known Issues:**
+- **Cosmic Desktop**: No drag-and-drop support (use click-to-select file picker)
+- **Niri**: Does not launch due to Wayland compatibility issues
+- **WSL**: Does not work due to networking issues
+- **YMMV** for other Linux environments
 
-1. **Open PowerShell as Administrator** (Right-click → Run as Administrator)
-
-2. **Install Chocolatey** (if not already installed):
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-```
-
-3. **Install MinGW**:
-```powershell
-choco install mingw -y
-```
-
-4. **Close and reopen PowerShell** (to update PATH)
-
-5. **Set the C compiler** (in each new PowerShell session, or add to your profile):
-```powershell
-$env:CC = "gcc"
-```
-
-6. **Build the app**:
-```powershell
-cd path\to\podcasterator
-go build -ldflags "-H windowsgui" -o podcasterator.exe
-```
-
-### Alternative: TDM-GCC (GUI Installer)
-
-Download and install from: https://jmeubank.github.io/tdm-gcc/download/
-
-After installation, restart PowerShell and build as shown above.
-
-## Linux Compatibility
-
-**Tested Platform**: KDE Plasma (Wayland) - Full functionality confirmed
-
-**Known Limitations**:
-- **Some Wayland compositors** (e.g., Niri) may not launch the application
-- **Cosmic Desktop**: Application launches but drag-and-drop not supported (compositor limitation)
-
-**Workaround**: Use the click-to-select file picker (click the drop zone) which works on all platforms.
-
-## Wayland Support (Linux)
-
-Podcasterator includes automatic Wayland detection and configuration.
-
-### Automatic Configuration
-
-The application automatically detects Wayland sessions and configures the GLFW backend accordingly. This happens transparently when you run the app.
-
-### Manual Launch (Alternative)
-
-If you experience issues, use the provided launch script:
-
-```bash
-# Make the script executable (first time only)
-chmod +x launch_wayland.sh
-
-# Launch the app
-./launch_wayland.sh
-```
-
-### Drag-and-Drop on Wayland
-
-**Known Issues**: Drag-and-drop functionality depends on the Wayland compositor's implementation:
-
-**Status by Environment**:
-- ✅ **KDE Plasma (KWin)**: Drag-and-drop works (tested and confirmed)
-- ✅ **GNOME (Mutter)**: Should work
-- ✅ **Sway/Hyprland**: Should work
-- ❌ **Cosmic Desktop**: Drag-and-drop not supported (compositor limitation - tracked in issue #1175)
-- ❌ **Niri**: May not launch or may have limited support
-
-**Workaround**: Use the click-to-select method instead:
-1. Click on the drop zone area in the app
-2. Use the file picker dialog to select audio files or images
-3. The file dialog uses XDG Desktop Portal and works reliably on all Wayland compositors
-
-**Debug Mode**: If you want to test if drag-and-drop events are being received, run the app from the terminal and watch for debug output when attempting to drag files.
-
-### Build Requirements for Wayland
-
-Ensure you have the necessary Wayland development libraries:
-
-```bash
-# Debian/Ubuntu/Mint
-sudo apt install libwayland-dev libxkbcommon-dev wayland-protocols
-
-# Fedora/RHEL
-sudo dnf install wayland-devel libxkbcommon-devel wayland-protocols-devel
-
-# Arch Linux
-sudo pacman -S wayland libxkbcommon wayland-protocols
-```
-
-### Troubleshooting Wayland
-
-**App doesn't launch:**
-- Ensure GLFW is built with Wayland support (dependencies should handle this automatically)
-- Try the launch script: `./launch_wayland.sh`
-- Check environment variables: `echo $WAYLAND_DISPLAY $XDG_SESSION_TYPE`
-
-**Drag-and-drop doesn't work:**
-- This is a known limitation on some Wayland compositors
-- Use the click-to-select method instead (click the drop zone)
-- The file picker dialog uses XDG Desktop Portal and should work
-
-**App window issues:**
-- Some Wayland compositors handle window decorations differently
-- If the window appears incorrectly, try running with X11 fallback: `GDK_BACKEND=x11 ./podcasterator`
+**Workaround:** Click the drop zone to open the file picker instead of drag-and-drop.
 
 ## File Locations
 
