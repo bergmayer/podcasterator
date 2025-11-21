@@ -53,7 +53,6 @@ go build -o podcasterator
   - **Linux**:
     - **X11 (basic)**: `libgl1-mesa-dev xorg-dev` (Debian/Ubuntu)
     - **Wayland (recommended)**: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols` (Debian/Ubuntu)
-    - **WSL**: Works on Windows via WSL2 with native Linux GUI support (note: drag-and-drop may not work)
 
 ### Build Commands
 
@@ -72,7 +71,6 @@ go build -ldflags="-s -w" -o podcasterator
 **Known Limitations**:
 - **Some Wayland compositors** (e.g., Niri) may not launch the application
 - **Cosmic Desktop**: Application launches but drag-and-drop not supported (compositor limitation)
-- **WSL**: Launches but drag-and-drop may not work reliably
 
 **Workaround**: Use the click-to-select file picker (click the drop zone) which works on all platforms.
 
@@ -106,7 +104,6 @@ chmod +x launch_wayland.sh
 - ✅ **Sway/Hyprland**: Should work
 - ❌ **Cosmic Desktop**: Drag-and-drop not supported (compositor limitation - tracked in issue #1175)
 - ❌ **Niri**: May not launch or may have limited support
-- ⚠️ **WSL**: Application launches but drag-and-drop may not work reliably
 
 **Workaround**: Use the click-to-select method instead:
 1. Click on the drop zone area in the app
@@ -145,50 +142,6 @@ sudo pacman -S wayland libxkbcommon wayland-protocols
 **App window issues:**
 - Some Wayland compositors handle window decorations differently
 - If the window appears incorrectly, try running with X11 fallback: `GDK_BACKEND=x11 ./podcasterator`
-
-## WSL (Windows Subsystem for Linux)
-
-Podcasterator automatically detects WSL and uses your Windows host's IP address so other devices on your network can access the podcast server.
-
-### Networking in WSL
-
-When you launch the server from WSL, the app will:
-1. Detect that it's running in WSL
-2. Automatically use your Windows host's IP address in the RSS feed
-3. Display the correct URL for network access
-4. Show a port forwarding command if needed
-
-### Firewall Configuration
-
-**Important**: You may need to configure Windows Firewall to allow port 8080:
-
-**Option 1: Allow through Windows Firewall GUI**
-1. Open Windows Firewall settings
-2. Click "Advanced settings"
-3. Create a new Inbound Rule for port 8080 (TCP)
-
-**Option 2: Use PowerShell (run as Administrator)**
-```powershell
-New-NetFirewallRule -DisplayName "Podcasterator WSL" -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow
-```
-
-**Option 3: Port Proxy (if automatic detection doesn't work)**
-
-If other devices still can't connect, set up port forwarding from Windows to WSL:
-
-```powershell
-# Run in PowerShell as Administrator
-# Replace <WSL-IP> with the IP shown when you start the app (e.g., 172.x.x.x)
-netsh interface portproxy add v4tov4 listenport=8080 listenaddress=0.0.0.0 connectport=8080 connectaddress=<WSL-IP>
-
-# To remove the port proxy later:
-netsh interface portproxy delete v4tov4 listenport=8080 listenaddress=0.0.0.0
-```
-
-### Known Limitations in WSL
-
-- Drag-and-drop may not work reliably (use the click-to-select file picker instead)
-- The app automatically handles WSL networking, but you must configure Windows Firewall
 
 ## File Locations
 

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -937,17 +936,6 @@ func fileExists(path string) bool {
 }
 
 func getLocalIP() string {
-	// Check if running in WSL
-	if isWSL() {
-		// Try to get Windows host IP from WSL
-		if hostIP := getWSLHostIP(); hostIP != "" {
-			fmt.Printf("WSL detected: Using Windows host IP: %s\n", hostIP)
-			fmt.Println("Note: Ensure Windows Firewall allows port 8080, or run:")
-			fmt.Printf("  netsh interface portproxy add v4tov4 listenport=8080 listenaddress=0.0.0.0 connectport=8080 connectaddress=%s\n", getWSLInternalIP())
-			return hostIP
-		}
-	}
-
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return "localhost"
@@ -961,65 +949,6 @@ func getLocalIP() string {
 		}
 	}
 	return "localhost"
-}
-
-func isWSL() bool {
-	// Check if /proc/version contains "microsoft" or "WSL"
-	data, err := os.ReadFile("/proc/version")
-	if err != nil {
-		return false
-	}
-	version := strings.ToLower(string(data))
-	return strings.Contains(version, "microsoft") || strings.Contains(version, "wsl")
-}
-
-func getWSLInternalIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-
-	for _, addr := range addrs {
-		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-			if ipNet.IP.To4() != nil {
-				return ipNet.IP.String()
-			}
-		}
-	}
-	return ""
-}
-
-func getWSLHostIP() string {
-	// Method 1: Try to get Windows host IP from /etc/resolv.conf
-	data, err := os.ReadFile("/etc/resolv.conf")
-	if err == nil {
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
-				parts := strings.Fields(line)
-				if len(parts) >= 2 {
-					ip := parts[1]
-					// Validate it's a proper IP
-					if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() != nil {
-						return ip
-					}
-				}
-			}
-		}
-	}
-
-	// Method 2: Try to get default gateway (Windows host)
-	// This command gets the default route gateway
-	cmd := exec.Command("sh", "-c", "ip route show | grep -i default | awk '{print $3}'")
-	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		ip := strings.TrimSpace(string(output))
-		if parsedIP := net.ParseIP(ip); parsedIP != nil && parsedIP.To4() != nil {
-			return ip
-		}
-	}
-
-	return ""
 }
 
 func convertAndResizeImage(srcPath, dstPath string, size uint) error {
