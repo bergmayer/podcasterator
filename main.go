@@ -408,8 +408,12 @@ func (p *Podcasterator) addFile(path string) {
 		DisplayName:  fileName,
 	})
 
-	p.fileList.Refresh()
-	p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	if p.fileList != nil {
+		p.fileList.Refresh()
+	}
+	if p.fileCountLabel != nil {
+		p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	}
 	p.saveState()
 }
 
@@ -434,8 +438,12 @@ func (p *Podcasterator) deleteFile(index int) {
 	os.Remove(file.TempPath)
 
 	p.files = append(p.files[:index], p.files[index+1:]...)
-	p.fileList.Refresh()
-	p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	if p.fileList != nil {
+		p.fileList.Refresh()
+	}
+	if p.fileCountLabel != nil {
+		p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	}
 	p.saveState()
 }
 
@@ -501,7 +509,9 @@ func (p *Podcasterator) renameFile(index int) {
 func (p *Podcasterator) moveUp(index int) {
 	if index > 0 && index < len(p.files) {
 		p.files[index], p.files[index-1] = p.files[index-1], p.files[index]
-		p.fileList.Refresh()
+		if p.fileList != nil {
+			p.fileList.Refresh()
+		}
 		p.saveState()
 	}
 }
@@ -509,7 +519,9 @@ func (p *Podcasterator) moveUp(index int) {
 func (p *Podcasterator) moveDown(index int) {
 	if index >= 0 && index < len(p.files)-1 {
 		p.files[index], p.files[index+1] = p.files[index+1], p.files[index]
-		p.fileList.Refresh()
+		if p.fileList != nil {
+			p.fileList.Refresh()
+		}
 		p.saveState()
 	}
 }
@@ -525,8 +537,12 @@ func (p *Podcasterator) clearAll() {
 	}
 
 	p.files = []AudioFile{}
-	p.fileList.Refresh()
-	p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	if p.fileList != nil {
+		p.fileList.Refresh()
+	}
+	if p.fileCountLabel != nil {
+		p.fileCountLabel.SetText(fmt.Sprintf("%d files", len(p.files)))
+	}
 	p.saveState()
 }
 
@@ -549,7 +565,9 @@ func (p *Podcasterator) alphabetize() {
 	}
 
 	p.files = sortedFiles
-	p.fileList.Refresh()
+	if p.fileList != nil {
+		p.fileList.Refresh()
+	}
 	p.saveState()
 }
 
@@ -565,7 +583,9 @@ func (p *Podcasterator) reverse() {
 	}
 
 	p.files = reversed
-	p.fileList.Refresh()
+	if p.fileList != nil {
+		p.fileList.Refresh()
+	}
 	p.saveState()
 }
 
