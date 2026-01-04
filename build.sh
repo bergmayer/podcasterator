@@ -3,6 +3,13 @@
 
 set -e
 
-echo "Building for $(uname -s)..."
-go build -o podcasterator
-echo "Built: podcasterator"
+echo "Installing npm dependencies..."
+npm install
+
+echo "Building Podcasterator for $(uname -s)..."
+npm run tauri build
+
+echo ""
+echo "Build complete!"
+echo "Binary: src-tauri/target/release/podcasterator"
+echo "Packages: src-tauri/target/release/bundle/"

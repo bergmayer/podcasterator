@@ -1,22 +1,18 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-podcasterator
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-error.log*
 
-# Test binary, built with `go test -c`
-*.test
+# Rust
+target/
+Cargo.lock
 
-# Output of the go coverage tool
-*.out
+# Tauri
+src-tauri/target/
 
-# Go workspace file
-go.work
-
-# Dependency directories
-vendor/
+# Build outputs
+dist/
+build/
 
 # macOS
 .DS_Store
@@ -29,6 +25,5 @@ vendor/
 .idea/
 *.iml
 
-# Build artifacts
-dist/
-build/
+# Old Go binary (keep until transition complete)
+podcasterator

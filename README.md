@@ -1,6 +1,6 @@
 # Podcasterator
 
-A cross-platform (macOS and Linux) GUI app (Go + Fyne) that creates a local podcast server from your audio files. Turn any MP3, M4A, MP4, or M4B files into a podcast feed you can subscribe to in your favorite podcast app.
+A cross-platform (macOS and Linux) desktop app that creates a local podcast server from your audio files. Turn any MP3, M4A, MP4, or M4B files into a podcast feed you can subscribe to in your favorite podcast app.
 
 ## Features
 
@@ -15,13 +15,17 @@ A cross-platform (macOS and Linux) GUI app (Go + Fyne) that creates a local podc
 
 ```bash
 ./build.sh
-./podcasterator
+./src-tauri/target/release/podcasterator
 ```
+
+Or install from a package:
+- **Debian/Ubuntu**: `sudo dpkg -i src-tauri/target/release/bundle/deb/Podcasterator_*.deb`
+- **Fedora/RHEL**: `sudo rpm -i src-tauri/target/release/bundle/rpm/Podcasterator-*.rpm`
 
 ## Usage
 
-1. **Add Files**: Drag audio files/folders onto the app or click the drop zone
-2. **Set Artwork** (optional): Drag an image file onto the app, or click "No artwork set"
+1. **Add Files**: Drag audio files/folders onto the app or click the buttons in the drop zone
+2. **Set Artwork** (optional): Click the artwork area to select an image
 3. **Name Your Podcast** (optional): Enter a name in the text field
 4. **Launch Server**: Click "Launch Local Podcast Server"
 5. **Copy URL**: Click "Copy URL" and paste into your podcast app
@@ -37,17 +41,18 @@ A cross-platform (macOS and Linux) GUI app (Go + Fyne) that creates a local podc
 - **Reverse**: Reverse the current file order
 
 **Artwork:**
-- **No artwork set**: Click to select an image file
-- **Delete artwork**: Click to remove the current artwork
+- Click the artwork area to select an image file
+- **Delete artwork**: Click the delete button to remove the current artwork
 
 ## Building
 
 ### Requirements
 
-- **Go** 1.21+
-- **C Compiler**:
+- **Rust** (via rustup)
+- **Node.js** 18+
+- **System Dependencies**:
   - macOS: Xcode Command Line Tools
-  - Linux: GCC (via build-essential or equivalent)
+  - Linux: `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf`
 
 ### Build Command
 
@@ -58,7 +63,7 @@ A cross-platform (macOS and Linux) GUI app (Go + Fyne) that creates a local podc
 ## Platform Notes
 
 - **Windows**: Run under WSL (Windows Subsystem for Linux)
-- **Linux**: Drag-and-drop may not work in all environments; click the drop zone to open the file picker instead
+- **Linux**: Requires WebKit2GTK and GTK3 development libraries
 
 ## File Locations
 
@@ -84,10 +89,11 @@ Files are copied here when added to the app:
 
 ## Technical Details
 
-- **Language**: Go 1.21+
-- **GUI**: Fyne v2
-- **RSS**: gorilla/feeds
-- **Image Processing**: nfnt/resize
+- **Backend**: Rust with Tauri
+- **Frontend**: Svelte 5 with TypeScript
+- **HTTP Server**: Axum
+- **RSS**: rss crate
+- **Image Processing**: image crate (Lanczos3 resampling)
 - **Port**: 8080 (no admin required)
 - **Feed Format**: RSS 2.0 with iTunes extensions
 
@@ -107,4 +113,4 @@ Files are copied here when added to the app:
 
 ## License
 
-Released into the public domain under the Unlicense.
+Released under the GPL 3.0 license.
