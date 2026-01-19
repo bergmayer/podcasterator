@@ -38,7 +38,7 @@ Files are copied here when added to the app:
 
 - **Backend**: Rust with [Tauri](https://crates.io/crates/tauri)
 - **Frontend**: [Svelte](https://svelte.dev/) 5 with TypeScript
-- **HTTP Server**: [Axum](https://crates.io/crates/axum)
+- **Web Framework**: [Axum](https://crates.io/crates/axum)
 - **RSS**: [rss](https://crates.io/crates/rss) crate
 - **Image Processing**: [image](https://crates.io/crates/image) crate (Lanczos3 resampling)
 - **Port**: 8080
