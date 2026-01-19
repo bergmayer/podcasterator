@@ -6,12 +6,12 @@ A cross-platform desktop app that creates a local podcast server from your audio
 
 ### Dependencies
 
-- [Rust](https://www.rust-lang.org/) (via [rustup](https://rustup.rs/))
-- [Node.js](https://nodejs.org/) 18+
+- **Rust** (via rustup)
+- **Node.js** 18+
 - **Platform-specific libraries**:
-  - **macOS**: [Xcode Command Line Tools](https://developer.apple.com/xcode/)
-  - **Linux**: [WebKit2GTK](https://webkitgtk.org/), [GTK3](https://www.gtk.org/) — `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf`
-  - **Windows**: [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (usually pre-installed on Windows 10/11)
+  - **macOS**: Xcode Command Line Tools
+  - **Linux**: `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf`
+  - **Windows**: WebView2 (usually pre-installed on Windows 10/11)
 
 Build scripts are provided for all platforms:
 
@@ -36,11 +36,11 @@ Files are copied here when added to the app:
 
 ## Technical Details
 
-- **Backend**: Rust with Tauri
-- **Frontend**: Svelte 5 with TypeScript
-- **HTTP Server**: Axum
-- **RSS**: rss crate
-- **Image Processing**: image crate (Lanczos3 resampling)
+- **Backend**: Rust with [Tauri](https://crates.io/crates/tauri)
+- **Frontend**: [Svelte](https://svelte.dev/) 5 with TypeScript
+- **HTTP Server**: [Axum](https://crates.io/crates/axum)
+- **RSS**: [rss](https://crates.io/crates/rss) crate
+- **Image Processing**: [image](https://crates.io/crates/image) crate (Lanczos3 resampling)
 - **Port**: 8080
 - **Feed Format**: RSS 2.0 with iTunes extensions
 
