@@ -6,10 +6,13 @@ set -e
 echo "Installing npm dependencies..."
 npm install
 
-echo "Building Podcasterator for $(uname -s)..."
+echo "Building Podcasterator..."
 npm run tauri build
 
 echo ""
 echo "Build complete!"
-echo "Binary: src-tauri/target/release/podcasterator"
-echo "Packages: src-tauri/target/release/bundle/"
+echo ""
+echo "The binary is located at:"
+echo "  src-tauri/target/release/podcasterator"
+echo ""
+echo "You can copy this binary to any location you prefer."
