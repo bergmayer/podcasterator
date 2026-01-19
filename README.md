@@ -11,7 +11,7 @@ A cross-platform desktop app that creates a local podcast server from your audio
 - **Platform-specific libraries**:
   - **macOS**: Xcode Command Line Tools
   - **Linux**: WebKit2GTK 4.1, OpenSSL, libayatana-appindicator, librsvg (see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your distro)
-  - **Windows**: WebView2 (usually pre-installed on Windows 10/11)
+  - **Windows**: [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (select "Desktop development with C++")
 
 Build scripts are provided for all platforms:
 
