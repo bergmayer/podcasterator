@@ -36,12 +36,10 @@ Files are copied here when added to the app:
 
 ## Technical Details
 
-- **Backend**: Rust with [Tauri](https://crates.io/crates/tauri)
-- **Frontend**: [Svelte](https://svelte.dev/) 5 with TypeScript
-- **Web Framework**: [Axum](https://crates.io/crates/axum)
-- **RSS**: [rss](https://crates.io/crates/rss) crate
+- **Desktop App**: [Tauri](https://crates.io/crates/tauri) (Rust) with [Svelte](https://svelte.dev/) 5 (TypeScript)
+- **Podcast Server**: [Axum](https://crates.io/crates/axum)
+- **RSS Generation**: [rss](https://crates.io/crates/rss) crate
 - **Image Processing**: [image](https://crates.io/crates/image) crate (Lanczos3 resampling)
-- **Port**: 8080
 - **Feed Format**: RSS 2.0 with iTunes extensions
 
 ## Supported Formats
