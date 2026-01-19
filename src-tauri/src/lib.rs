@@ -6,6 +6,7 @@ mod state;
 
 use state::AppStateManager;
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 pub fn run() {
@@ -17,6 +18,15 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            // Register the cache directory with the asset protocol
+            if let Some(cache_dir) = dirs::cache_dir() {
+                let podcasterator_cache = cache_dir.join("podcasterator");
+                let scope = app.asset_protocol_scope();
+                let _ = scope.allow_directory(&podcasterator_cache, true);
+            }
+            Ok(())
+        })
         .manage(state_manager)
         .invoke_handler(tauri::generate_handler![
             commands::get_state,

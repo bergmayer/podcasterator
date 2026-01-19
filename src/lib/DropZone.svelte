@@ -1,6 +1,6 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
-  import { addFiles, setArtwork } from "../stores/app";
+  import { addFiles } from "../stores/app";
 
   let isDragOver = $state(false);
 
@@ -41,22 +41,6 @@
       await addFiles([selected]);
     }
   }
-
-  async function selectArtwork() {
-    const selected = await open({
-      multiple: false,
-      filters: [
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "gif", "bmp", "tiff"],
-        },
-      ],
-    });
-
-    if (selected && !Array.isArray(selected)) {
-      await setArtwork(selected);
-    }
-  }
 </script>
 
 <div
@@ -73,14 +57,13 @@
 >
   <div class="drop-content">
     <span class="icon">📁</span>
-    <p>Drag audio files or artwork here</p>
+    <p>Drag audio files here</p>
     <p class="subtext">Or click a button below</p>
   </div>
 
   <div class="buttons">
     <button onclick={selectFiles}>Select Audio Files</button>
     <button onclick={selectFolder}>Select Folder</button>
-    <button onclick={selectArtwork}>Select Artwork</button>
   </div>
 </div>
 

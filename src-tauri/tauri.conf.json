@@ -14,7 +14,7 @@
       {
         "title": "Podcasterator",
         "width": 900,
-        "height": 600,
+        "height": 750,
         "resizable": true,
         "fullscreen": false
       }
@@ -23,7 +23,9 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": {
+          "allow": ["**", "$CACHE/**", "$HOME/.cache/**"]
+        }
       }
     }
   },
