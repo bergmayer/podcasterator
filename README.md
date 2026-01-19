@@ -6,12 +6,12 @@ A cross-platform desktop app that creates a local podcast server from your audio
 
 ### Dependencies
 
-- **Rust** (via rustup)
-- **Node.js** 18+
+- [Rust](https://www.rust-lang.org/) (via [rustup](https://rustup.rs/))
+- [Node.js](https://nodejs.org/) 18+
 - **Platform-specific libraries**:
-  - **macOS**: Xcode Command Line Tools
-  - **Linux**: `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf`
-  - **Windows**: WebView2 (usually pre-installed on Windows 10/11)
+  - **macOS**: [Xcode Command Line Tools](https://developer.apple.com/xcode/)
+  - **Linux**: [WebKit2GTK](https://webkitgtk.org/), [GTK3](https://www.gtk.org/) — `sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf`
+  - **Windows**: [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (usually pre-installed on Windows 10/11)
 
 Build scripts are provided for all platforms:
 
