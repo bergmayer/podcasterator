@@ -26,7 +26,7 @@ Files are copied here when added to the app:
 
 - **macOS**: `~/Library/Caches/podcasterator/`
 - **Linux**: `~/.cache/podcasterator/` (follows XDG Base Directory spec)
-- **Windows**: `%LOCALAPPDATA%\podcasterator\cache\`
+- **Windows**: `%LOCALAPPDATA%\podcasterator\`
 
 ### Configuration (State & Settings)
 
