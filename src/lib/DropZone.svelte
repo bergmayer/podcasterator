@@ -1,18 +1,43 @@
 <script lang="ts">
   import { open } from "@tauri-apps/plugin-dialog";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { onMount } from "svelte";
   import { addFiles } from "../stores/app";
 
   let isDragOver = $state(false);
 
-  async function handleDrop(event: DragEvent) {
+  onMount(() => {
+    const unlisten = getCurrentWebview().onDragDropEvent(async (event) => {
+      if (event.payload.type === "over") {
+        isDragOver = true;
+      } else if (event.payload.type === "leave" || event.payload.type === "cancel") {
+        isDragOver = false;
+      } else if (event.payload.type === "drop") {
+        isDragOver = false;
+        const paths = event.payload.paths;
+        if (paths && paths.length > 0) {
+          await addFiles(paths);
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
+
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+    isDragOver = true;
+  }
+
+  function handleDragLeave() {
+    isDragOver = false;
+  }
+
+  function handleDrop(event: DragEvent) {
     event.preventDefault();
     isDragOver = false;
-
-    const items = event.dataTransfer?.items;
-    if (!items) return;
-
-    // Note: In Tauri 2, drag-drop works differently
-    // For now, we'll use the file dialog
   }
 
   async function selectFiles() {
@@ -21,7 +46,7 @@
       filters: [
         {
           name: "Audio Files",
-          extensions: ["mp3", "m4a", "mp4", "m4b"],
+          extensions: ["mp3", "MP3", "m4a", "M4A", "mp4", "MP4", "m4b", "M4B"],
         },
       ],
     });
@@ -48,11 +73,8 @@
   class:dragover={isDragOver}
   role="button"
   tabindex="0"
-  ondragover={(e) => {
-    e.preventDefault();
-    isDragOver = true;
-  }}
-  ondragleave={() => (isDragOver = false)}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
   ondrop={handleDrop}
 >
   <div class="drop-content">

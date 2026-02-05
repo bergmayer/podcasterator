@@ -2,14 +2,26 @@
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { serverUrl, isServerRunning, startServer, stopServer } from "../stores/app";
 
-  let copied = $state(false);
+  let copyStatus = $state<"idle" | "copied" | "failed">("idle");
 
   async function copyUrl() {
     if ($serverUrl) {
-      await writeText($serverUrl);
-      copied = true;
-      setTimeout(() => (copied = false), 2000);
+      try {
+        await writeText($serverUrl);
+        copyStatus = "copied";
+        setTimeout(() => (copyStatus = "idle"), 2000);
+      } catch (err) {
+        console.error("Failed to copy URL:", err);
+        copyStatus = "failed";
+        setTimeout(() => (copyStatus = "idle"), 2000);
+      }
     }
+  }
+
+  function getCopyButtonText(): string {
+    if (copyStatus === "copied") return "Copied!";
+    if (copyStatus === "failed") return "Failed!";
+    return "Copy URL";
   }
 </script>
 
@@ -19,7 +31,7 @@
 
     <div class="url-container">
       <span class="url">{$serverUrl}</span>
-      <button onclick={copyUrl}>{copied ? "Copied!" : "Copy URL"}</button>
+      <button onclick={copyUrl}>{getCopyButtonText()}</button>
     </div>
   {:else}
     <button class="primary" onclick={startServer}>
