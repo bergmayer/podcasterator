@@ -20,6 +20,7 @@
   }
 
   async function saveRename(index: number) {
+    if (editingIndex !== index) return; // Already cancelled
     if (editingName.trim()) {
       await renameFile(index, editingName.trim());
     }

@@ -3,18 +3,22 @@
   import { serverUrl, isServerRunning, startServer, stopServer } from "../stores/app";
 
   let copyStatus = $state<"idle" | "copied" | "failed">("idle");
+  let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   async function copyUrl() {
     if ($serverUrl) {
+      if (copyTimeout) clearTimeout(copyTimeout);
       try {
         await writeText($serverUrl);
         copyStatus = "copied";
-        setTimeout(() => (copyStatus = "idle"), 2000);
       } catch (err) {
         console.error("Failed to copy URL:", err);
         copyStatus = "failed";
-        setTimeout(() => (copyStatus = "idle"), 2000);
       }
+      copyTimeout = setTimeout(() => {
+        copyStatus = "idle";
+        copyTimeout = null;
+      }, 2000);
     }
   }
 

@@ -1,8 +1,7 @@
-use crate::files::{self, is_audio_file, is_image_file};
-use crate::image::process_artwork;
+use crate::files;
 use crate::server::launch_server;
 use crate::state::{AppState, AppStateManager};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -20,21 +19,31 @@ pub async fn add_files(
     paths: Vec<String>,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
+    let mut errors = Vec::new();
 
     for path in paths {
         let p = Path::new(&path);
 
         if p.is_dir() {
-            files::add_folder(&mut manager, &path)?;
-        } else if is_audio_file(p) {
-            files::add_file(&mut manager, &path)?;
-        } else if is_image_file(p) {
-            // Handle as artwork
-            let artwork_path = manager.cache_dir().join("artwork.jpg");
-            process_artwork(p, &artwork_path)?;
-            manager.state.artwork_path = Some(artwork_path.to_string_lossy().to_string());
-            manager.save_state()?;
+            if let Err(e) = files::add_folder(&mut manager, &path).await {
+                errors.push(e);
+            }
+        } else if files::is_audio_file(p) {
+            if let Err(e) = files::add_file(&mut manager, &path).await {
+                errors.push(e);
+            }
+        } else if files::is_image_file(p) {
+            if let Err(e) = files::add_artwork(&mut manager, &path) {
+                errors.push(e);
+            }
         }
+    }
+
+    // Save once after all files processed
+    manager.save_state()?;
+
+    if !errors.is_empty() {
+        log::warn!("Some files could not be added: {}", errors.join(", "));
     }
 
     Ok(manager.get_state())
@@ -46,7 +55,7 @@ pub async fn delete_file(
     index: usize,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::delete_file(&mut manager, index)?;
+    files::delete_file(&mut manager, index).await?;
     Ok(manager.get_state())
 }
 
@@ -57,7 +66,7 @@ pub async fn rename_file(
     new_name: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::rename_file(&mut manager, index, new_name)?;
+    files::rename_file(&mut manager, index, new_name).await?;
     Ok(manager.get_state())
 }
 
@@ -95,7 +104,7 @@ pub async fn reverse(state: tauri::State<'_, StateManager>) -> Result<AppState, 
 #[tauri::command]
 pub async fn clear_all(state: tauri::State<'_, StateManager>) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::clear_all(&mut manager)?;
+    files::clear_all(&mut manager).await?;
     Ok(manager.get_state())
 }
 
@@ -105,36 +114,16 @@ pub async fn set_artwork(
     path: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-
-    let source_path = Path::new(&path);
-    if !is_image_file(source_path) {
-        return Err("Unsupported image format".to_string());
-    }
-
-    let artwork_path = manager.cache_dir().join("artwork.jpg");
-    process_artwork(source_path, &artwork_path)?;
-
-    manager.state.artwork_path = Some(artwork_path.to_string_lossy().to_string());
+    files::add_artwork(&mut manager, &path)?;
     manager.save_state()?;
-
     Ok(manager.get_state())
 }
 
 #[tauri::command]
 pub async fn delete_artwork(state: tauri::State<'_, StateManager>) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-
-    if let Some(ref artwork_path) = manager.state.artwork_path {
-        let path = PathBuf::from(artwork_path);
-        if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| format!("Failed to delete artwork: {}", e))?;
-        }
-    }
-
-    manager.state.artwork_path = None;
+    files::delete_artwork(&mut manager).await?;
     manager.save_state()?;
-
     Ok(manager.get_state())
 }
 
@@ -162,10 +151,11 @@ pub async fn start_server(
     let cache_dir = manager.cache_dir().clone();
     let app_state = manager.state.clone();
 
-    let (url, shutdown_tx) = launch_server(app_state, cache_dir).await?;
+    let (url, shutdown_tx, state_tx) = launch_server(app_state, cache_dir).await?;
 
     manager.server_url = Some(url.clone());
     manager.server_shutdown = Some(shutdown_tx);
+    manager.server_state_tx = Some(state_tx);
 
     Ok(url)
 }
@@ -175,10 +165,13 @@ pub async fn stop_server(state: tauri::State<'_, StateManager>) -> Result<(), St
     let mut manager = state.lock().await;
 
     if let Some(shutdown_tx) = manager.server_shutdown.take() {
-        shutdown_tx.send(()).ok();
+        if shutdown_tx.send(()).is_err() {
+            log::warn!("Server shutdown receiver already dropped");
+        }
     }
 
     manager.server_url = None;
+    manager.server_state_tx = None;
     Ok(())
 }
 

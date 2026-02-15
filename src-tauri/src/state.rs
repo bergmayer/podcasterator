@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -8,6 +9,8 @@ pub struct AudioFile {
     pub original_path: String,
     pub temp_path: String,
     pub display_name: String,
+    #[serde(default)]
+    pub added_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -22,6 +25,7 @@ pub struct AppStateManager {
     pub state: AppState,
     pub server_url: Option<String>,
     pub server_shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+    pub server_state_tx: Option<tokio::sync::watch::Sender<AppState>>,
     cache_dir: PathBuf,
     config_dir: PathBuf,
 }
@@ -46,6 +50,7 @@ impl AppStateManager {
             state,
             server_url: None,
             server_shutdown: None,
+            server_state_tx: None,
             cache_dir,
             config_dir,
         }
@@ -62,7 +67,6 @@ impl AppStateManager {
 
         #[cfg(not(target_os = "macos"))]
         {
-            // Linux/Windows - use XDG directories
             let cache = dirs::cache_dir()
                 .ok_or_else(|| "Failed to get cache directory".to_string())?
                 .join("podcasterator");
@@ -86,6 +90,12 @@ impl AppStateManager {
         let json = serde_json::to_string_pretty(&self.state)
             .map_err(|e| format!("Failed to serialize state: {}", e))?;
         fs::write(&path, json).map_err(|e| format!("Failed to write state file: {}", e))?;
+
+        // Sync to running server
+        if let Some(ref tx) = self.server_state_tx {
+            let _ = tx.send(self.state.clone());
+        }
+
         Ok(())
     }
 
@@ -105,19 +115,38 @@ fn load_state(path: &PathBuf, state: &mut AppState) -> Result<(), String> {
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse state file: {}", e))?;
 
     // Validate that temp files still exist
+    let before_count = loaded_state.files.len();
     loaded_state.files.retain(|f| {
-        let path = PathBuf::from(&f.temp_path);
-        path.exists()
+        let exists = PathBuf::from(&f.temp_path).exists();
+        if !exists {
+            log::warn!("Temp file missing, removing from state: {}", f.display_name);
+        }
+        exists
     });
+    if loaded_state.files.len() < before_count {
+        log::warn!(
+            "Removed {} missing files from state",
+            before_count - loaded_state.files.len()
+        );
+    }
 
     // Validate artwork exists
     if let Some(ref artwork) = loaded_state.artwork_path {
         if !PathBuf::from(artwork).exists() {
+            log::warn!("Artwork file missing, clearing from state");
             loaded_state.artwork_path = None;
+        }
+    }
+
+    // Backwards compat: assign added_at for files that don't have it
+    let file_count = loaded_state.files.len();
+    for (i, file) in loaded_state.files.iter_mut().enumerate() {
+        if file.added_at.is_empty() {
+            let ts = Utc::now() - chrono::Duration::hours(file_count as i64 - i as i64);
+            file.added_at = ts.to_rfc2822();
         }
     }
 
     *state = loaded_state;
     Ok(())
 }
-

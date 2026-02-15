@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { appState, loadState, setPodcastName } from "./stores/app";
+  import { appState, lastError, loadState, setPodcastName } from "./stores/app";
   import DropZone from "./lib/DropZone.svelte";
   import Artwork from "./lib/Artwork.svelte";
   import ServerControls from "./lib/ServerControls.svelte";
@@ -16,6 +16,10 @@
     loadState();
   });
 </script>
+
+{#if $lastError}
+  <div class="error-bar">{$lastError}</div>
+{/if}
 
 <main>
   <div class="left-panel">
@@ -44,6 +48,19 @@
 </main>
 
 <style>
+  .error-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 16px;
+    background: #e74c3c;
+    color: white;
+    font-size: 13px;
+    text-align: center;
+    z-index: 1000;
+  }
+
   main {
     display: flex;
     height: 100vh;

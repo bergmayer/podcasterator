@@ -1,4 +1,4 @@
-use crate::files::get_mime_type;
+use crate::files::{get_mime_type, ARTWORK_FILENAME};
 use crate::state::AppState;
 use axum::{
     body::Body,
@@ -8,16 +8,15 @@ use axum::{
     routing::get,
     Router,
 };
-use chrono::Utc;
+use chrono::DateTime;
 use rss::{ChannelBuilder, EnclosureBuilder, GuidBuilder, ImageBuilder, ItemBuilder};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::watch;
 
-#[derive(Clone)]
 pub struct ServerState {
-    pub app_state: AppState,
+    pub state_rx: watch::Receiver<AppState>,
     pub cache_dir: PathBuf,
     pub base_url: String,
 }
@@ -30,20 +29,27 @@ pub fn get_local_ip() -> Result<String, String> {
 }
 
 /// Generate RSS feed XML
-fn generate_feed(state: &ServerState) -> String {
+fn generate_feed(app_state: &AppState, base_url: &str) -> String {
     let mut items = Vec::new();
 
-    for (i, file) in state.app_state.files.iter().enumerate() {
+    for file in &app_state.files {
         let path = PathBuf::from(&file.temp_path);
         let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let mime_type = get_mime_type(&path);
 
-        // Calculate pub date (first file = newest)
-        let pub_date = Utc::now() - chrono::Duration::minutes(i as i64);
+        // Use the stored added_at timestamp for stable pub dates
+        let pub_date = if !file.added_at.is_empty() {
+            file.added_at.clone()
+        } else {
+            // Fallback for files without timestamp
+            DateTime::parse_from_rfc2822("Mon, 01 Jan 2024 00:00:00 +0000")
+                .unwrap()
+                .to_rfc2822()
+        };
 
         let file_url = format!(
             "{}/files/{}/{}",
-            state.base_url,
+            base_url,
             file.id,
             urlencoding::encode(&file.display_name)
         );
@@ -63,7 +69,7 @@ fn generate_feed(state: &ServerState) -> String {
             .title(Some(file.display_name.clone()))
             .link(Some(file_url.clone()))
             .guid(Some(guid))
-            .pub_date(Some(pub_date.to_rfc2822()))
+            .pub_date(Some(pub_date))
             .enclosure(Some(enclosure))
             .build();
 
@@ -72,19 +78,19 @@ fn generate_feed(state: &ServerState) -> String {
 
     let mut channel_builder = ChannelBuilder::default();
     channel_builder
-        .title(&state.app_state.podcast_name)
-        .link(&state.base_url)
+        .title(&app_state.podcast_name)
+        .link(base_url)
         .description("Local podcast feed")
-        .last_build_date(Some(Utc::now().to_rfc2822()))
+        .last_build_date(Some(chrono::Utc::now().to_rfc2822()))
         .items(items);
 
     // Add artwork if available
-    if let Some(ref artwork_path) = state.app_state.artwork_path {
+    if let Some(ref artwork_path) = app_state.artwork_path {
         if PathBuf::from(artwork_path).exists() {
             let image = ImageBuilder::default()
-                .url(format!("{}/artwork.jpg", state.base_url))
-                .title(&state.app_state.podcast_name)
-                .link(&state.base_url)
+                .url(format!("{}/{}", base_url, ARTWORK_FILENAME))
+                .title(&app_state.podcast_name)
+                .link(base_url)
                 .build();
             channel_builder.image(Some(image));
         }
@@ -95,9 +101,9 @@ fn generate_feed(state: &ServerState) -> String {
 }
 
 /// Serve the RSS feed
-async fn feed_handler(AxumState(state): AxumState<Arc<RwLock<ServerState>>>) -> impl IntoResponse {
-    let state = state.read().await;
-    let feed = generate_feed(&state);
+async fn feed_handler(AxumState(state): AxumState<Arc<ServerState>>) -> impl IntoResponse {
+    let app_state = state.state_rx.borrow().clone();
+    let feed = generate_feed(&app_state, &state.base_url);
 
     Response::builder()
         .status(StatusCode::OK)
@@ -106,15 +112,11 @@ async fn feed_handler(AxumState(state): AxumState<Arc<RwLock<ServerState>>>) -> 
         .unwrap()
 }
 
-
-
 /// Serve audio files
 async fn file_handler(
-    AxumState(state): AxumState<Arc<RwLock<ServerState>>>,
+    AxumState(state): AxumState<Arc<ServerState>>,
     AxumPath((uuid, filename)): AxumPath<(String, String)>,
 ) -> impl IntoResponse {
-    let state = state.read().await;
-
     // Security: Clean the path to prevent directory traversal
     let clean_uuid = path_clean::clean(&uuid);
     let clean_filename = path_clean::clean(&filename);
@@ -149,11 +151,11 @@ async fn serve_file(file_path: &PathBuf) -> Response {
 
 /// Serve artwork
 async fn artwork_handler(
-    AxumState(state): AxumState<Arc<RwLock<ServerState>>>,
+    AxumState(state): AxumState<Arc<ServerState>>,
 ) -> impl IntoResponse {
-    let state = state.read().await;
+    let app_state = state.state_rx.borrow().clone();
 
-    let artwork_path = match &state.app_state.artwork_path {
+    let artwork_path = match &app_state.artwork_path {
         Some(p) => PathBuf::from(p),
         None => return (StatusCode::NOT_FOUND, "No artwork").into_response(),
     };
@@ -161,42 +163,46 @@ async fn artwork_handler(
     serve_file(&artwork_path).await
 }
 
-/// Start the HTTP server
+/// Start the HTTP server. Returns (feed_url, shutdown_sender, state_sender).
 pub async fn launch_server(
     app_state: AppState,
     cache_dir: PathBuf,
-) -> Result<(String, tokio::sync::oneshot::Sender<()>), String> {
+) -> Result<(String, tokio::sync::oneshot::Sender<()>, watch::Sender<AppState>), String> {
     let ip = get_local_ip()?;
-    
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
         .await
         .map_err(|e| format!("Failed to bind to a port: {}", e))?;
-    
+
     let port = listener.local_addr().unwrap().port();
     let base_url = format!("http://{}:{}", ip, port);
 
-    let server_state = Arc::new(RwLock::new(ServerState {
-        app_state,
+    let (state_tx, state_rx) = watch::channel(app_state);
+
+    let server_state = Arc::new(ServerState {
+        state_rx,
         cache_dir,
         base_url: base_url.clone(),
-    }));
+    });
 
     let app = Router::new()
         .route("/feed.xml", get(feed_handler))
         .route("/files/{uuid}/{filename}", get(file_handler))
-        .route("/artwork.jpg", get(artwork_handler))
+        .route(&format!("/{}", ARTWORK_FILENAME), get(artwork_handler))
         .with_state(server_state);
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     tokio::spawn(async move {
-        axum::serve(listener, app)
+        if let Err(e) = axum::serve(listener, app)
             .with_graceful_shutdown(async {
                 shutdown_rx.await.ok();
             })
             .await
-            .ok();
+        {
+            log::error!("HTTP server error: {}", e);
+        }
     });
 
-    Ok((format!("{}/feed.xml", base_url), shutdown_tx))
+    Ok((format!("{}/feed.xml", base_url), shutdown_tx, state_tx))
 }

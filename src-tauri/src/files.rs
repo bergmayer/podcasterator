@@ -1,23 +1,29 @@
 use crate::state::{AppStateManager, AudioFile};
-use std::fs;
+use chrono::Utc;
 use std::path::{Path, PathBuf};
+use tokio::fs;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
 const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &["mp3", "m4a", "mp4", "m4b"];
 const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "bmp", "tiff"];
+pub const ARTWORK_FILENAME: &str = "artwork.jpg";
 
-pub fn is_audio_file(path: &Path) -> bool {
+fn get_extension_lower(path: &Path) -> Option<String> {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| SUPPORTED_AUDIO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .map(|e| e.to_lowercase())
+}
+
+pub fn is_audio_file(path: &Path) -> bool {
+    get_extension_lower(path)
+        .map(|e| SUPPORTED_AUDIO_EXTENSIONS.contains(&e.as_str()))
         .unwrap_or(false)
 }
 
 pub fn is_image_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .map(|e| SUPPORTED_IMAGE_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+    get_extension_lower(path)
+        .map(|e| SUPPORTED_IMAGE_EXTENSIONS.contains(&e.as_str()))
         .unwrap_or(false)
 }
 
@@ -28,18 +34,37 @@ fn normalize_extension(filename: &str) -> String {
         Some(s) => s,
         None => return filename.to_string(),
     };
-    let ext = match path.extension().and_then(|s| s.to_str()) {
-        Some(s) => s.to_lowercase(),
-        None => return filename.to_string(),
-    };
-
-    match ext.as_str() {
-        "mp4" | "m4b" => format!("{}.m4a", stem),
+    match get_extension_lower(path).as_deref() {
+        Some("mp4") | Some("m4b") => format!("{}.m4a", stem),
         _ => filename.to_string(),
     }
 }
 
-pub fn add_file(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
+/// Remove a temp file and its parent UUID directory
+async fn cleanup_temp_file(temp_path: &Path) {
+    if temp_path.exists() {
+        if let Err(e) = fs::remove_file(temp_path).await {
+            log::warn!("Failed to remove temp file {}: {}", temp_path.display(), e);
+        }
+    }
+    if let Some(parent) = temp_path.parent() {
+        // remove_dir only succeeds if empty, which is what we want
+        let _ = fs::remove_dir(parent).await;
+    }
+}
+
+fn validate_filename(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Filename cannot be empty".to_string());
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err("Filename contains invalid characters".to_string());
+    }
+    Ok(())
+}
+
+/// Add a single audio file. Does NOT call save_state — caller is responsible.
+pub async fn add_file(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
     let source_path = PathBuf::from(path);
 
     if !source_path.exists() {
@@ -59,29 +84,32 @@ pub fn add_file(manager: &mut AppStateManager, path: &str) -> Result<(), String>
 
     let display_name = normalize_extension(&original_name);
 
-    // Create UUID directory in cache
     let uuid_dir = manager.cache_dir().join(&id);
-    fs::create_dir_all(&uuid_dir).map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    fs::create_dir_all(&uuid_dir)
+        .await
+        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
 
     let temp_path = uuid_dir.join(&display_name);
 
-    // Copy file to temp location
-    fs::copy(&source_path, &temp_path).map_err(|e| format!("Failed to copy file: {}", e))?;
+    fs::copy(&source_path, &temp_path)
+        .await
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
 
     let audio_file = AudioFile {
         id,
         original_path: path.to_string(),
         temp_path: temp_path.to_string_lossy().to_string(),
         display_name,
+        added_at: Utc::now().to_rfc2822(),
     };
 
     manager.state.files.push(audio_file);
-    manager.save_state()?;
 
     Ok(())
 }
 
-pub fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
+/// Add all audio files from a folder. Does NOT call save_state — caller is responsible.
+pub async fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
     let folder_path = PathBuf::from(path);
 
     if !folder_path.is_dir() {
@@ -90,44 +118,78 @@ pub fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(), Strin
 
     let mut errors = Vec::new();
 
-    for entry in WalkDir::new(&folder_path)
-        .follow_links(true)
+    // Collect paths first (WalkDir is sync, which is fine for directory listing)
+    let paths: Vec<PathBuf> = WalkDir::new(&folder_path)
+        .max_depth(20)
         .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let entry_path = entry.path();
-        if entry_path.is_file() && is_audio_file(entry_path) {
-            if let Some(path_str) = entry_path.to_str() {
-                if let Err(e) = add_file(manager, path_str) {
-                    errors.push(e);
+        .filter_map(|entry| match entry {
+            Ok(e) => {
+                let p = e.into_path();
+                if p.is_file() && is_audio_file(&p) {
+                    Some(p)
+                } else {
+                    None
                 }
             }
+            Err(e) => {
+                errors.push(format!("Error traversing directory: {}", e));
+                None
+            }
+        })
+        .collect();
+
+    for p in paths {
+        if let Some(path_str) = p.to_str() {
+            if let Err(e) = add_file(manager, path_str).await {
+                errors.push(e);
+            }
+        } else {
+            errors.push(format!("Invalid UTF-8 path: {}", p.display()));
         }
     }
 
     if !errors.is_empty() {
-        return Err(errors.join("\n"));
+        log::warn!("Some files could not be added:\n{}", errors.join("\n"));
     }
 
     Ok(())
 }
 
-pub fn delete_file(manager: &mut AppStateManager, index: usize) -> Result<(), String> {
+/// Set artwork from an image file. Does NOT call save_state — caller is responsible.
+pub fn add_artwork(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
+    let source_path = Path::new(path);
+    if !is_image_file(source_path) {
+        return Err("Unsupported image format".to_string());
+    }
+
+    let artwork_path = manager.cache_dir().join(ARTWORK_FILENAME);
+    crate::image::process_artwork(source_path, &artwork_path)?;
+
+    manager.state.artwork_path = Some(artwork_path.to_string_lossy().to_string());
+    Ok(())
+}
+
+/// Delete artwork file and clear from state. Does NOT call save_state.
+pub async fn delete_artwork(manager: &mut AppStateManager) -> Result<(), String> {
+    if let Some(ref artwork_path) = manager.state.artwork_path {
+        let path = PathBuf::from(artwork_path);
+        if path.exists() {
+            fs::remove_file(&path)
+                .await
+                .map_err(|e| format!("Failed to delete artwork: {}", e))?;
+        }
+    }
+    manager.state.artwork_path = None;
+    Ok(())
+}
+
+pub async fn delete_file(manager: &mut AppStateManager, index: usize) -> Result<(), String> {
     if index >= manager.state.files.len() {
         return Err("Index out of bounds".to_string());
     }
 
-    let file = &manager.state.files[index];
-    let temp_path = PathBuf::from(&file.temp_path);
-
-    // Remove the temp file and its parent UUID directory
-    if temp_path.exists() {
-        fs::remove_file(&temp_path)
-            .map_err(|e| format!("Failed to delete temp file: {}", e))?;
-    }
-    if let Some(parent) = temp_path.parent() {
-        fs::remove_dir(parent).map_err(|e| format!("Failed to delete temp directory: {}", e))?;
-    }
+    let temp_path = PathBuf::from(&manager.state.files[index].temp_path);
+    cleanup_temp_file(&temp_path).await;
 
     manager.state.files.remove(index);
     manager.save_state()?;
@@ -135,7 +197,7 @@ pub fn delete_file(manager: &mut AppStateManager, index: usize) -> Result<(), St
     Ok(())
 }
 
-pub fn rename_file(
+pub async fn rename_file(
     manager: &mut AppStateManager,
     index: usize,
     new_name: String,
@@ -143,6 +205,8 @@ pub fn rename_file(
     if index >= manager.state.files.len() {
         return Err("Index out of bounds".to_string());
     }
+
+    validate_filename(&new_name)?;
 
     let file = &manager.state.files[index];
 
@@ -160,8 +224,10 @@ pub fn rename_file(
     let old_temp_path = PathBuf::from(&file.temp_path);
     let new_temp_path = old_temp_path.with_file_name(&new_display_name);
 
+    // Perform filesystem rename first, only update state on success
     if old_temp_path.exists() {
         fs::rename(&old_temp_path, &new_temp_path)
+            .await
             .map_err(|e| format!("Failed to rename file: {}", e))?;
     }
 
@@ -174,7 +240,7 @@ pub fn rename_file(
 
 pub fn move_up(manager: &mut AppStateManager, index: usize) -> Result<(), String> {
     if index == 0 || index >= manager.state.files.len() {
-        return Ok(()); // Nothing to do
+        return Ok(());
     }
 
     manager.state.files.swap(index, index - 1);
@@ -184,8 +250,8 @@ pub fn move_up(manager: &mut AppStateManager, index: usize) -> Result<(), String
 }
 
 pub fn move_down(manager: &mut AppStateManager, index: usize) -> Result<(), String> {
-    if index >= manager.state.files.len() - 1 {
-        return Ok(()); // Nothing to do
+    if manager.state.files.is_empty() || index >= manager.state.files.len() - 1 {
+        return Ok(());
     }
 
     manager.state.files.swap(index, index + 1);
@@ -211,33 +277,38 @@ pub fn reverse(manager: &mut AppStateManager) -> Result<(), String> {
     Ok(())
 }
 
-pub fn clear_all(manager: &mut AppStateManager) -> Result<(), String> {
-    // Remove all temp files and directories
+pub async fn clear_all(manager: &mut AppStateManager) -> Result<(), String> {
+    // Clean up all temp files, collecting errors but not stopping
+    let mut cleanup_errors = Vec::new();
     for file in &manager.state.files {
         let temp_path = PathBuf::from(&file.temp_path);
         if temp_path.exists() {
-            fs::remove_file(&temp_path)
-                .map_err(|e| format!("Failed to delete temp file: {}", e))?;
+            if let Err(e) = fs::remove_file(&temp_path).await {
+                cleanup_errors.push(format!("{}: {}", file.display_name, e));
+            }
         }
         if let Some(parent) = temp_path.parent() {
-            fs::remove_dir(parent).map_err(|e| format!("Failed to delete temp directory: {}", e))?;
+            let _ = fs::remove_dir(parent).await;
         }
     }
 
+    // Always clear state, even if some file deletions failed
     manager.state.files.clear();
     manager.save_state()?;
+
+    if !cleanup_errors.is_empty() {
+        log::warn!(
+            "Some temp files could not be deleted:\n{}",
+            cleanup_errors.join("\n")
+        );
+    }
 
     Ok(())
 }
 
 /// Get MIME type for audio file
 pub fn get_mime_type(path: &Path) -> &'static str {
-    match path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-        .as_deref()
-    {
+    match get_extension_lower(path).as_deref() {
         Some("mp3") => "audio/mpeg",
         Some("m4a") | Some("mp4") | Some("m4b") => "audio/mp4",
         _ => "application/octet-stream",

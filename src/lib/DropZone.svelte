@@ -26,6 +26,9 @@
     };
   });
 
+  // Native drag handlers provide visual hover feedback and preventDefault()
+  // to avoid the browser's default drop behavior. Actual file handling is done
+  // by the Tauri onDragDropEvent listener above.
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
     isDragOver = true;

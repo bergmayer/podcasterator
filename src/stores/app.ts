@@ -6,6 +6,7 @@ export interface AudioFile {
   original_path: string;
   temp_path: string;
   display_name: string;
+  added_at: string;
 }
 
 export interface AppState {
@@ -22,6 +23,34 @@ export const appState = writable<AppState>({
 
 export const serverUrl = writable<string | null>(null);
 export const isServerRunning = writable(false);
+export const lastError = writable<string | null>(null);
+
+let errorTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function showError(message: string) {
+  if (errorTimeout) clearTimeout(errorTimeout);
+  const msg = typeof message === "string" ? message : "An error occurred";
+  lastError.set(msg);
+  errorTimeout = setTimeout(() => {
+    lastError.set(null);
+    errorTimeout = null;
+  }, 5000);
+}
+
+async function invokeAndSync(
+  cmd: string,
+  args?: Record<string, unknown>
+): Promise<AppState | null> {
+  try {
+    const state = await invoke<AppState>(cmd, args);
+    appState.set(state);
+    return state;
+  } catch (e) {
+    console.error(`Command failed: ${cmd}`, e);
+    showError(typeof e === "string" ? e : `Failed: ${cmd}`);
+    return null;
+  }
+}
 
 export async function loadState(): Promise<void> {
   try {
@@ -35,106 +64,54 @@ export async function loadState(): Promise<void> {
     }
   } catch (e) {
     console.error("Failed to load state:", e);
+    showError("Failed to load application state");
   }
 }
 
 export async function addFiles(paths: string[]): Promise<void> {
-  try {
-    const state = await invoke<AppState>("add_files", { paths });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to add files:", e);
-  }
+  await invokeAndSync("add_files", { paths });
 }
 
 export async function deleteFile(index: number): Promise<void> {
-  try {
-    const state = await invoke<AppState>("delete_file", { index });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to delete file:", e);
-  }
+  await invokeAndSync("delete_file", { index });
 }
 
 export async function renameFile(
   index: number,
   newName: string
 ): Promise<void> {
-  try {
-    const state = await invoke<AppState>("rename_file", {
-      index,
-      newName,
-    });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to rename file:", e);
-  }
+  await invokeAndSync("rename_file", { index, newName });
 }
 
 export async function moveFile(
   index: number,
   direction: "up" | "down"
 ): Promise<void> {
-  try {
-    const state = await invoke<AppState>("move_file", { index, direction });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to move file:", e);
-  }
+  await invokeAndSync("move_file", { index, direction });
 }
 
 export async function alphabetize(): Promise<void> {
-  try {
-    const state = await invoke<AppState>("alphabetize");
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to alphabetize:", e);
-  }
+  await invokeAndSync("alphabetize");
 }
 
 export async function reverse(): Promise<void> {
-  try {
-    const state = await invoke<AppState>("reverse");
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to reverse:", e);
-  }
+  await invokeAndSync("reverse");
 }
 
 export async function clearAll(): Promise<void> {
-  try {
-    const state = await invoke<AppState>("clear_all");
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to clear all:", e);
-  }
+  await invokeAndSync("clear_all");
 }
 
 export async function setArtwork(path: string): Promise<void> {
-  try {
-    const state = await invoke<AppState>("set_artwork", { path });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to set artwork:", e);
-  }
+  await invokeAndSync("set_artwork", { path });
 }
 
 export async function deleteArtwork(): Promise<void> {
-  try {
-    const state = await invoke<AppState>("delete_artwork");
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to delete artwork:", e);
-  }
+  await invokeAndSync("delete_artwork");
 }
 
 export async function setPodcastName(name: string): Promise<void> {
-  try {
-    const state = await invoke<AppState>("set_podcast_name", { name });
-    appState.set(state);
-  } catch (e) {
-    console.error("Failed to set podcast name:", e);
-  }
+  await invokeAndSync("set_podcast_name", { name });
 }
 
 export async function startServer(): Promise<void> {
@@ -144,6 +121,7 @@ export async function startServer(): Promise<void> {
     isServerRunning.set(true);
   } catch (e) {
     console.error("Failed to start server:", e);
+    showError(typeof e === "string" ? e : "Failed to start server");
   }
 }
 
@@ -154,5 +132,6 @@ export async function stopServer(): Promise<void> {
     isServerRunning.set(false);
   } catch (e) {
     console.error("Failed to stop server:", e);
+    showError(typeof e === "string" ? e : "Failed to stop server");
   }
 }
