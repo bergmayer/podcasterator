@@ -120,7 +120,7 @@ pub async fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(),
 
     // Collect paths first (WalkDir is sync, which is fine for directory listing)
     let paths: Vec<PathBuf> = WalkDir::new(&folder_path)
-        .max_depth(20)
+        .max_depth(1)
         .into_iter()
         .filter_map(|entry| match entry {
             Ok(e) => {

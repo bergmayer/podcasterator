@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount } from "svelte";
   import { addFiles } from "../stores/app";
@@ -43,30 +43,10 @@
     isDragOver = false;
   }
 
-  async function selectFiles() {
-    const selected = await open({
-      multiple: true,
-      filters: [
-        {
-          name: "Audio Files",
-          extensions: ["mp3", "MP3", "m4a", "M4A", "mp4", "MP4", "m4b", "M4B"],
-        },
-      ],
-    });
-
-    if (selected) {
-      const paths = Array.isArray(selected) ? selected : [selected];
+  async function selectFilesOrFolder() {
+    const paths = await invoke<string[]>("pick_files_or_folder");
+    if (paths && paths.length > 0) {
       await addFiles(paths);
-    }
-  }
-
-  async function selectFolder() {
-    const selected = await open({
-      directory: true,
-    });
-
-    if (selected) {
-      await addFiles([selected]);
     }
   }
 </script>
@@ -82,13 +62,12 @@
 >
   <div class="drop-content">
     <span class="icon">📁</span>
-    <p>Drag audio files here</p>
-    <p class="subtext">Or click a button below</p>
+    <p>Drag audio files or folders here</p>
+    <p class="subtext">Or click the button below</p>
   </div>
 
   <div class="buttons">
-    <button onclick={selectFiles}>Select Audio Files</button>
-    <button onclick={selectFolder}>Select Folder</button>
+    <button onclick={selectFilesOrFolder}>Select Files or Folder</button>
   </div>
 </div>
 
