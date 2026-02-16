@@ -5,19 +5,22 @@
 #   ./build.sh                Build raw binary only
 #   ./build.sh --makebundle   Build platform-specific distributable bundle (AppImage/DMG/NSIS)
 #   ./build.sh --makepackage  Build and install native package for your distro
+#   ./build.sh --check        Check build dependencies only
 #   ./build.sh --clean        Remove all build artifacts
 
 set -e
 
 MAKEBUNDLE=false
 MAKEPACKAGE=false
+CHECK=false
 CLEAN=false
 for arg in "$@"; do
     case "$arg" in
         --makebundle) MAKEBUNDLE=true ;;
         --makepackage) MAKEPACKAGE=true ;;
+        --check) CHECK=true ;;
         --clean) CLEAN=true ;;
-        *) echo "Unknown option: $arg"; echo "Usage: ./build.sh [--makebundle] [--makepackage] [--clean]"; exit 1 ;;
+        *) echo "Unknown option: $arg"; echo "Usage: ./build.sh [--makebundle] [--makepackage] [--check] [--clean]"; exit 1 ;;
     esac
 done
 
@@ -214,6 +217,11 @@ if [ "$HAS_ERRORS" = true ]; then
     exit 1
 fi
 
+if [ "$CHECK" = true ]; then
+    echo "All dependencies satisfied."
+    exit 0
+fi
+
 # --- Native package build ---
 
 if [ "$MAKEPACKAGE" = true ]; then
@@ -224,12 +232,10 @@ if [ "$MAKEPACKAGE" = true ]; then
                     echo "Building Arch package..."
                     cd "$SCRIPT_DIR/pkg/arch"
                     makepkg -sf
+                    PKG=$(ls -t "$SCRIPT_DIR/pkg/arch/"*.pkg.tar* 2>/dev/null | head -1)
                     echo ""
                     echo "Build complete! Install with:"
-                    echo "  sudo pacman -U pkg/arch/$(ls -t "$SCRIPT_DIR/pkg/arch/"*.pkg.tar* 2>/dev/null | head -1 | xargs basename)"
-                    echo ""
-                    echo "Or build and install in one step:"
-                    echo "  cd pkg/arch && makepkg -si"
+                    echo "  sudo pacman -U $PKG"
                     ;;
                 ubuntu|debian|pop|linuxmint)
                     echo "Building .deb package..."

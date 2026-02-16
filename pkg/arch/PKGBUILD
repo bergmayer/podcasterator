@@ -8,6 +8,7 @@ url='https://github.com/bergmayer/podcasterator'
 license=('MIT')
 depends=('webkit2gtk-4.1' 'gtk3' 'openssl' 'libappindicator-gtk3' 'librsvg')
 makedepends=('rust' 'nodejs' 'npm' 'pkg-config')
+options=(!debug)
 source=()
 
 _projdir="$startdir/../.."
@@ -30,7 +31,24 @@ package() {
     cd "$_projdir"
 
     # Binary
-    install -Dm755 "src-tauri/target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+    install -Dm755 "src-tauri/target/release/$pkgname" "$pkgdir/usr/bin/$pkgname-bin"
+
+    # Wrapper script
+    install -Dm755 /dev/stdin "$pkgdir/usr/bin/$pkgname" << 'WRAPPER'
+#!/bin/bash
+exec 3>&1
+STDERR=$(podcasterator-bin "$@" 2>&1 1>&3)
+EXIT=$?
+exec 3>&-
+if echo "$STDERR" | grep -q "failed to get driver name for fd\|vkEnumeratePhysicalDevices failed\|failed to create dri2 screen"; then
+    echo "Note: Hardware GPU acceleration unavailable, using software rendering." >&2
+    STDERR=$(echo "$STDERR" | grep -v "libEGL warning:\|MESA: error:\|MESA-LOADER:")
+fi
+if [ -n "$STDERR" ]; then
+    echo "$STDERR" >&2
+fi
+exit $EXIT
+WRAPPER
 
     # Desktop entry
     install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/$pkgname.desktop" << 'EOF'
