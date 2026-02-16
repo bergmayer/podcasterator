@@ -263,12 +263,25 @@ if [ "$MAKEPACKAGE" = true ]; then
             esac
             ;;
         Darwin)
-            echo "On macOS, use --makebundle for a .dmg instead."
-            exit 1
+            echo "Building macOS DMG..."
+            npm install
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null || true
+            npm run tauri build -- --target universal-apple-darwin --bundles dmg
+            echo ""
+            echo "Build complete!"
+            echo ""
+            echo "DMG located at:"
+            echo "  src-tauri/target/universal-apple-darwin/release/bundle/dmg/"
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            echo "On Windows, use --makebundle for NSIS/MSI installers instead."
-            exit 1
+            echo "Building Windows installers..."
+            npm install
+            npm run tauri build -- --bundles nsis,msi
+            echo ""
+            echo "Build complete!"
+            echo ""
+            echo "Installers located at:"
+            echo "  src-tauri/target/release/bundle/"
             ;;
     esac
     exit 0
@@ -282,14 +295,14 @@ npm install
 if [ "$MAKEBUNDLE" = true ]; then
     case "$OS" in
         Darwin)
-            echo "Building universal macOS bundle..."
+            echo "Building macOS .app bundle..."
             rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null || true
-            npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+            npm run tauri build -- --target universal-apple-darwin --bundles app
             echo ""
             echo "Build complete!"
             echo ""
-            echo "Bundle located at:"
-            echo "  src-tauri/target/universal-apple-darwin/release/bundle/dmg/"
+            echo "App bundle located at:"
+            echo "  src-tauri/target/universal-apple-darwin/release/bundle/macos/"
             ;;
         Linux)
             echo "Building Linux AppImage..."
@@ -322,13 +335,13 @@ if [ "$MAKEBUNDLE" = true ]; then
             echo "  src-tauri/target/release/bundle/appimage/"
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            echo "Building Windows bundles..."
-            npm run tauri build -- --bundles nsis,msi
+            echo "Building Windows portable exe..."
+            npm run tauri build -- --no-bundle
             echo ""
             echo "Build complete!"
             echo ""
-            echo "Bundles located at:"
-            echo "  src-tauri/target/release/bundle/"
+            echo "The portable exe is located at:"
+            echo "  src-tauri/target/release/podcasterator.exe"
             ;;
         *)
             echo "Unknown platform: $OS. Building with default bundles..."
