@@ -1,14 +1,21 @@
 #!/bin/bash
 # Build script for Podcasterator
-#
-# Usage:
-#   ./build.sh                Build raw binary only
-#   ./build.sh --makebundle   Build platform-specific distributable bundle (AppImage/DMG/NSIS)
-#   ./build.sh --makepackage  Build and install native package for your distro
-#   ./build.sh --check        Check build dependencies only
-#   ./build.sh --clean        Remove all build artifacts
 
 set -e
+
+show_help() {
+    cat << 'HELP'
+Usage: ./build.sh [OPTION]
+
+Options:
+  (none)          Build raw binary only
+  --makebundle    Build portable distributable (AppImage, .app, portable exe)
+  --makepackage   Build system installer (distro package, DMG, NSIS/MSI)
+  --check         Check build dependencies only
+  --clean         Remove all build artifacts
+  --help          Show this help message
+HELP
+}
 
 MAKEBUNDLE=false
 MAKEPACKAGE=false
@@ -20,7 +27,8 @@ for arg in "$@"; do
         --makepackage) MAKEPACKAGE=true ;;
         --check) CHECK=true ;;
         --clean) CLEAN=true ;;
-        *) echo "Unknown option: $arg"; echo "Usage: ./build.sh [--makebundle] [--makepackage] [--check] [--clean]"; exit 1 ;;
+        --help|-h) show_help; exit 0 ;;
+        *) echo "Unknown option: $arg"; echo "Run './build.sh --help' for usage."; exit 1 ;;
     esac
 done
 
