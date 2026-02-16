@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount } from "svelte";
   import { addFiles } from "../stores/app";
@@ -26,9 +26,6 @@
     };
   });
 
-  // Native drag handlers provide visual hover feedback and preventDefault()
-  // to avoid the browser's default drop behavior. Actual file handling is done
-  // by the Tauri onDragDropEvent listener above.
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
     isDragOver = true;
@@ -43,10 +40,34 @@
     isDragOver = false;
   }
 
-  async function selectFilesOrFolder() {
-    const paths = await invoke<string[]>("pick_files_or_folder");
-    if (paths && paths.length > 0) {
-      await addFiles(paths);
+  async function selectFiles() {
+    const selected = await open({
+      multiple: true,
+      directory: false,
+      filters: [
+        {
+          name: "Audio Files",
+          extensions: ["mp3", "m4a", "mp4", "m4b"],
+        },
+      ],
+    });
+
+    if (selected) {
+      const paths = Array.isArray(selected) ? selected : [selected];
+      if (paths.length > 0) {
+        await addFiles(paths);
+      }
+    }
+  }
+
+  async function selectFolder() {
+    const selected = await open({
+      multiple: false,
+      directory: true,
+    });
+
+    if (selected && !Array.isArray(selected)) {
+      await addFiles([selected]);
     }
   }
 </script>
@@ -63,11 +84,12 @@
   <div class="drop-content">
     <span class="icon">📁</span>
     <p>Drag audio files or folders here</p>
-    <p class="subtext">Or click the button below</p>
+    <p class="subtext">Or click a button below</p>
   </div>
 
   <div class="buttons">
-    <button onclick={selectFilesOrFolder}>Select Files or Folder</button>
+    <button onclick={selectFiles}>Select Files</button>
+    <button onclick={selectFolder}>Select Folder</button>
   </div>
 </div>
 

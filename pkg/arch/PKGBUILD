@@ -1,0 +1,58 @@
+# Maintainer: bergmayer
+pkgname=podcasterator
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='A desktop app that creates a local podcast server from your audio files'
+arch=('x86_64')
+url='https://github.com/bergmayer/podcasterator'
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'openssl' 'libappindicator-gtk3' 'librsvg')
+makedepends=('rust' 'nodejs' 'npm' 'pkg-config')
+source=()
+
+_projdir="$startdir/../.."
+
+prepare() {
+    # Read version from tauri.conf.json
+    _ver=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$_projdir/src-tauri/tauri.conf.json')).version)")
+    if [ "$_ver" != "$pkgver" ]; then
+        echo "WARNING: PKGBUILD version ($pkgver) differs from tauri.conf.json ($_ver)"
+    fi
+}
+
+build() {
+    cd "$_projdir"
+    npm install
+    npm run tauri build -- --no-bundle
+}
+
+package() {
+    cd "$_projdir"
+
+    # Binary
+    install -Dm755 "src-tauri/target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+
+    # Desktop entry
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/$pkgname.desktop" << 'EOF'
+[Desktop Entry]
+Comment=Local podcast server for organizing and serving audio files
+Exec=podcasterator
+StartupWMClass=podcasterator
+Icon=podcasterator
+Name=Podcasterator
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Network;
+EOF
+
+    # Icons
+    for size in 32 128 256 512; do
+        install -Dm644 "src-tauri/icons/${size}x${size}.png" \
+            "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/$pkgname.png"
+    done
+    install -Dm644 "src-tauri/icons/icon.png" \
+        "$pkgdir/usr/share/icons/hicolor/1024x1024/apps/$pkgname.png"
+
+    # License
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE" 2>/dev/null || true
+}

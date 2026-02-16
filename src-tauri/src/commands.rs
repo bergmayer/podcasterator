@@ -1,4 +1,3 @@
-use crate::dialog;
 use crate::files;
 use crate::server::launch_server;
 use crate::state::{AppState, AppStateManager};
@@ -180,9 +179,4 @@ pub async fn stop_server(state: tauri::State<'_, StateManager>) -> Result<(), St
 pub async fn get_server_url(state: tauri::State<'_, StateManager>) -> Result<Option<String>, ()> {
     let manager = state.lock().await;
     Ok(manager.server_url.clone())
-}
-
-#[tauri::command]
-pub fn pick_files_or_folder() -> Vec<String> {
-    dialog::pick_files_or_folder()
 }

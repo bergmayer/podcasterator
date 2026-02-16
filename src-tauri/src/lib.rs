@@ -1,5 +1,4 @@
 mod commands;
-mod dialog;
 mod files;
 mod image;
 mod server;
@@ -44,7 +43,6 @@ pub fn run() {
             commands::start_server,
             commands::stop_server,
             commands::get_server_url,
-            commands::pick_files_or_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
