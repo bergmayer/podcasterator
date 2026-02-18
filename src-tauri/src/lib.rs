@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 pub fn run() {
     env_logger::init();
     let state_manager = Arc::new(Mutex::new(AppStateManager::new()));
+    let state_for_exit = state_manager.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -44,6 +45,12 @@ pub fn run() {
             commands::stop_server,
             commands::get_server_url,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(move |_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let mut manager = state_for_exit.blocking_lock();
+                manager.cleanup_temp_files();
+            }
+        });
 }

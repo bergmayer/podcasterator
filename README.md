@@ -1,6 +1,6 @@
 # Podcasterator
 
-A cross-platform desktop app that creates a local podcast server from your audio files. Turn any MP3, M4A, MP4, or M4B files into a podcast feed you can subscribe to in your favorite podcast app.
+A cross-platform desktop app that creates a local podcast server from your audio files. Turn any MP3, M4A, MP4, or M4B files into a podcast feed you can subscribe to in a podcast app.
 
 ## Building
 
@@ -12,14 +12,6 @@ A cross-platform desktop app that creates a local podcast server from your audio
 - **Linux**: WebKit2GTK 4.1, GTK3, OpenSSL, libayatana-appindicator, librsvg
 
 The build scripts check for missing dependencies before building and provide distro-specific install commands. To install Linux dependencies manually:
-
-- **Arch**: `sudo pacman -S webkit2gtk-4.1 openssl libappindicator-gtk3 librsvg`
-- **Debian/Ubuntu**: `sudo apt install libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev`
-- **Fedora**: `sudo dnf install webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel`
-- **RHEL/CentOS**: `sudo yum install webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel`
-- **openSUSE**: `sudo zypper install webkit2gtk3-devel libopenssl-devel libappindicator3-1 librsvg-devel`
-
-See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) page for other distros.
 
 ### Build
 
@@ -41,19 +33,13 @@ Files are copied here when added to the app:
 - **Linux**: `~/.cache/podcasterator/` (follows XDG Base Directory spec)
 - **Windows**: `%LOCALAPPDATA%\podcasterator\`
 
+They are deleted when cleared from the interface or when the app quits. The artwork and podcast name persist between launches unless manually cleared. 
+
 ### Configuration (State & Settings)
 
 - **macOS**: `~/Library/Application Support/Podcasterator/state.json`
 - **Linux**: `~/.config/Podcasterator/state.json` (follows XDG Base Directory spec)
 - **Windows**: `%APPDATA%\Podcasterator\state.json`
-
-## Technical Details
-
-- **Desktop App**: [Tauri](https://crates.io/crates/tauri) (Rust) with [Svelte](https://svelte.dev/) 5 (TypeScript)
-- **Podcast Server**: [Axum](https://crates.io/crates/axum)
-- **RSS Generation**: [rss](https://crates.io/crates/rss) crate
-- **Image Processing**: [image](https://crates.io/crates/image) crate (Lanczos3 resampling)
-- **Feed Format**: RSS 2.0 with iTunes extensions
 
 ## Supported Formats
 
