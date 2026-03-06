@@ -154,29 +154,30 @@ case "$OS" in
             check_bundle_command "fusermount" "FUSE"
             check_bundle_command "patchelf" "patchelf"
             check_bundle_command "file" "file"
+            check_bundle_command "zip" "zip"
 
             if [ ${#BUNDLE_MISSING[@]} -gt 0 ]; then
                 case "$DISTRO" in
                     arch|manjaro|endeavouros)
-                        BUNDLE_INSTALL_HINT="  sudo pacman -S fuse2 patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo pacman -S fuse2 patchelf file zip"
                         ;;
                     ubuntu|debian|pop|linuxmint)
-                        BUNDLE_INSTALL_HINT="  sudo apt install libfuse2 patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo apt install libfuse2 patchelf file zip"
                         ;;
                     fedora)
-                        BUNDLE_INSTALL_HINT="  sudo dnf install fuse patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo dnf install fuse patchelf file zip"
                         ;;
                     rhel|centos|rocky|alma)
-                        BUNDLE_INSTALL_HINT="  sudo yum install fuse patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo yum install fuse patchelf file zip"
                         ;;
                     opensuse*|suse*)
-                        BUNDLE_INSTALL_HINT="  sudo zypper install fuse patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo zypper install fuse patchelf file zip"
                         ;;
                     alpine)
-                        BUNDLE_INSTALL_HINT="  sudo apk add fuse patchelf file"
+                        BUNDLE_INSTALL_HINT="  sudo apk add fuse patchelf file zip"
                         ;;
                     *)
-                        BUNDLE_INSTALL_HINT="  Install fuse, patchelf, and file for your distro"
+                        BUNDLE_INSTALL_HINT="  Install fuse, patchelf, file, and zip for your distro"
                         ;;
                 esac
             fi
@@ -184,6 +185,7 @@ case "$OS" in
 
         # Additional dependencies for native packaging
         if [ "$MAKEPACKAGE" = true ]; then
+            check_bundle_command "zip" "zip"
             case "$DISTRO" in
                 arch|manjaro|endeavouros)
                     check_bundle_command "makepkg" "makepkg (base-devel)"
@@ -270,7 +272,7 @@ if [ "$MAKEPACKAGE" = true ]; then
                     cd "$SCRIPT_DIR/pkg/arch"
                     makepkg -sf
                     PKG=$(ls -t "$SCRIPT_DIR/pkg/arch/"*.pkg.tar* 2>/dev/null | head -1)
-                    zip_to_releases "$PKG" "Podcasterator-arch.zip"
+                    zip_to_releases "$PKG" "Podcasterator-linux-arch.zip"
                     cd "$SCRIPT_DIR"
                     echo ""
                     echo "Build complete!"
@@ -283,7 +285,7 @@ if [ "$MAKEPACKAGE" = true ]; then
                     npm install
                     npm run tauri build -- --bundles deb
                     DEB=$(find src-tauri/target/release/bundle/deb -name "*.deb" | head -1)
-                    zip_to_releases "$DEB" "Podcasterator-deb.zip"
+                    zip_to_releases "$DEB" "Podcasterator-linux-deb.zip"
                     echo ""
                     echo "Build complete!"
                     echo ""
@@ -295,7 +297,7 @@ if [ "$MAKEPACKAGE" = true ]; then
                     npm install
                     npm run tauri build -- --bundles rpm
                     RPM=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" | head -1)
-                    zip_to_releases "$RPM" "Podcasterator-rpm.zip"
+                    zip_to_releases "$RPM" "Podcasterator-linux-rpm.zip"
                     echo ""
                     echo "Build complete!"
                     echo ""
@@ -379,7 +381,7 @@ if [ "$MAKEBUNDLE" = true ]; then
                 echo "Build complete!"
             fi
             APPIMAGE=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -1)
-            zip_to_releases "$APPIMAGE" "Podcasterator-linux.zip"
+            zip_to_releases "$APPIMAGE" "Podcasterator-linux-AppImage.zip"
             echo ""
             ;;
         MINGW*|MSYS*|CYGWIN*)
