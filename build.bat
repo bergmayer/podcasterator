@@ -4,25 +4,31 @@ setlocal enabledelayedexpansion
 REM Build script for Podcasterator (Windows)
 REM
 REM Usage:
-REM   build.bat              Build raw binary only
-REM   build.bat --makebundle Build Windows installer bundles
-REM   build.bat --clean      Remove all build artifacts
+REM   build.bat                Build raw binary only
+REM   build.bat --makebundle   Build portable exe
+REM   build.bat --makepackage  Build NSIS and MSI installers
+REM   build.bat --clean        Remove all build artifacts
 
 set "MAKEBUNDLE=false"
+set "MAKEPACKAGE=false"
 set "CLEAN=false"
 for %%a in (%*) do (
     if "%%a"=="--makebundle" (
         set "MAKEBUNDLE=true"
+    ) else if "%%a"=="--makepackage" (
+        set "MAKEPACKAGE=true"
     ) else if "%%a"=="--clean" (
         set "CLEAN=true"
     ) else (
         echo Unknown option: %%a
-        echo Usage: build.bat [--makebundle] [--clean]
+        echo Usage: build.bat [--makebundle] [--makepackage] [--clean]
         exit /b 1
     )
 )
 
 cd /d "%~dp0"
+
+set "RELEASES_DIR=%~dp0releases"
 
 REM --- Clean ---
 
@@ -31,6 +37,7 @@ if "%CLEAN%"=="true" (
     if exist src-tauri\target rmdir /s /q src-tauri\target
     if exist node_modules rmdir /s /q node_modules
     if exist dist rmdir /s /q dist
+    if exist releases\* del /q releases\*
     echo Clean complete.
     exit /b 0
 )
@@ -83,15 +90,32 @@ REM --- Build ---
 echo Installing npm dependencies...
 call npm install || exit /b 1
 
-if "%MAKEBUNDLE%"=="true" (
-    echo Building Windows bundles...
+if not exist "%RELEASES_DIR%" mkdir "%RELEASES_DIR%"
+
+if "%MAKEPACKAGE%"=="true" (
+    echo Building Windows installers...
     call npm run tauri build -- --bundles nsis,msi || exit /b 1
+    for %%f in (src-tauri\target\release\bundle\nsis\*.exe) do (
+        powershell -Command "Compress-Archive -Path '%%f' -DestinationPath '%RELEASES_DIR%\Podcasterator-windows-nsis.zip' -Force"
+        del "%%f"
+    )
+    for %%f in (src-tauri\target\release\bundle\msi\*.msi) do (
+        powershell -Command "Compress-Archive -Path '%%f' -DestinationPath '%RELEASES_DIR%\Podcasterator-windows-msi.zip' -Force"
+        del "%%f"
+    )
+    echo.
+    echo Build complete! Installers zipped to releases\
+    exit /b 0
+)
+
+if "%MAKEBUNDLE%"=="true" (
+    echo Building Windows portable exe...
+    call npm run tauri build -- --no-bundle || exit /b 1
+    powershell -Command "Compress-Archive -Path 'src-tauri\target\release\podcasterator.exe' -DestinationPath '%RELEASES_DIR%\Podcasterator-windows.zip' -Force"
+    del "src-tauri\target\release\podcasterator.exe"
     echo.
     echo Build complete!
-    echo.
-    echo Bundles located at:
-    echo   src-tauri\target\release\bundle\nsis\
-    echo   src-tauri\target\release\bundle\msi\
+    echo   Zip: releases\Podcasterator-windows.zip
 ) else (
     echo Building Podcasterator (binary only^)...
     call npm run tauri build -- --no-bundle || exit /b 1

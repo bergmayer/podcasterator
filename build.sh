@@ -9,11 +9,16 @@ Usage: ./build.sh [OPTION]
 
 Options:
   (none)          Build raw binary only
-  --makebundle    Build portable distributable (AppImage, .app, portable exe)
-  --makepackage   Build system installer (distro package, DMG, NSIS/MSI)
+  --makebundle    Build portable distributable (AppImage, .app)
+  --makepackage   Build system installer/package
   --check         Check build dependencies only
   --clean         Remove all build artifacts
   --help          Show this help message
+
+--makepackage supported formats:
+  macOS:   DMG
+  Linux:   pacman (Arch), deb (Debian/Ubuntu), rpm (Fedora/RHEL)
+  Windows: NSIS, MSI
 HELP
 }
 
@@ -35,6 +40,8 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+RELEASES_DIR="$SCRIPT_DIR/releases"
+
 # --- Clean ---
 
 if [ "$CLEAN" = true ]; then
@@ -42,6 +49,7 @@ if [ "$CLEAN" = true ]; then
     rm -rf src-tauri/target
     rm -rf node_modules
     rm -rf dist
+    rm -rf "$RELEASES_DIR"/*
     echo "Clean complete."
     exit 0
 fi
@@ -230,9 +238,30 @@ if [ "$CHECK" = true ]; then
     exit 0
 fi
 
+# --- Helper: zip and move to releases ---
+
+zip_to_releases() {
+    local src="$1"
+    local zipname="$2"
+    mkdir -p "$RELEASES_DIR"
+    if [ -d "$src" ]; then
+        (cd "$(dirname "$src")" && zip -r "$RELEASES_DIR/$zipname" "$(basename "$src")")
+        rm -rf "$src"
+        echo "  Created releases/$zipname"
+    elif [ -f "$src" ]; then
+        (cd "$(dirname "$src")" && zip "$RELEASES_DIR/$zipname" "$(basename "$src")")
+        rm -f "$src"
+        echo "  Created releases/$zipname"
+    else
+        echo "  Warning: could not find $src"
+    fi
+}
+
 # --- Native package build ---
 
 if [ "$MAKEPACKAGE" = true ]; then
+    mkdir -p "$RELEASES_DIR"
+
     case "$OS" in
         Linux)
             case "$DISTRO" in
@@ -241,27 +270,37 @@ if [ "$MAKEPACKAGE" = true ]; then
                     cd "$SCRIPT_DIR/pkg/arch"
                     makepkg -sf
                     PKG=$(ls -t "$SCRIPT_DIR/pkg/arch/"*.pkg.tar* 2>/dev/null | head -1)
+                    zip_to_releases "$PKG" "Podcasterator-arch.zip"
+                    cd "$SCRIPT_DIR"
                     echo ""
-                    echo "Build complete! Install with:"
-                    echo "  sudo pacman -U $PKG"
+                    echo "Build complete!"
+                    echo ""
+                    echo "Install with:"
+                    echo "  sudo pacman -U releases/$(basename "$PKG")"
                     ;;
                 ubuntu|debian|pop|linuxmint)
                     echo "Building .deb package..."
                     npm install
                     npm run tauri build -- --bundles deb
-                    echo ""
-                    echo "Build complete! Install with:"
                     DEB=$(find src-tauri/target/release/bundle/deb -name "*.deb" | head -1)
-                    echo "  sudo dpkg -i $DEB"
+                    zip_to_releases "$DEB" "Podcasterator-deb.zip"
+                    echo ""
+                    echo "Build complete!"
+                    echo ""
+                    echo "Install with:"
+                    echo "  unzip releases/Podcasterator-deb.zip && sudo dpkg -i *.deb"
                     ;;
                 fedora|rhel|centos|rocky|alma)
                     echo "Building .rpm package..."
                     npm install
                     npm run tauri build -- --bundles rpm
-                    echo ""
-                    echo "Build complete! Install with:"
                     RPM=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" | head -1)
-                    echo "  sudo rpm -i $RPM"
+                    zip_to_releases "$RPM" "Podcasterator-rpm.zip"
+                    echo ""
+                    echo "Build complete!"
+                    echo ""
+                    echo "Install with:"
+                    echo "  unzip releases/Podcasterator-rpm.zip && sudo rpm -i *.rpm"
                     ;;
                 *)
                     echo "ERROR: Native packaging not supported for distro '$DISTRO'."
@@ -275,21 +314,21 @@ if [ "$MAKEPACKAGE" = true ]; then
             npm install
             rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null || true
             npm run tauri build -- --target universal-apple-darwin --bundles dmg
+            DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+            zip_to_releases "$DMG" "Podcasterator-macos-dmg.zip"
             echo ""
             echo "Build complete!"
-            echo ""
-            echo "DMG located at:"
-            echo "  src-tauri/target/universal-apple-darwin/release/bundle/dmg/"
             ;;
         MINGW*|MSYS*|CYGWIN*)
             echo "Building Windows installers..."
             npm install
             npm run tauri build -- --bundles nsis,msi
+            NSIS_EXE=$(find src-tauri/target/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
+            zip_to_releases "$NSIS_EXE" "Podcasterator-windows-nsis.zip"
+            MSI_FILE=$(find src-tauri/target/release/bundle/msi -name "*.msi" 2>/dev/null | head -1)
+            zip_to_releases "$MSI_FILE" "Podcasterator-windows-msi.zip"
             echo ""
             echo "Build complete!"
-            echo ""
-            echo "Installers located at:"
-            echo "  src-tauri/target/release/bundle/"
             ;;
     esac
     exit 0
@@ -301,16 +340,17 @@ echo "Installing npm dependencies..."
 npm install
 
 if [ "$MAKEBUNDLE" = true ]; then
+    mkdir -p "$RELEASES_DIR"
+
     case "$OS" in
         Darwin)
             echo "Building macOS .app bundle..."
             rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null || true
             npm run tauri build -- --target universal-apple-darwin --bundles app
+            APP=$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+            zip_to_releases "$APP" "Podcasterator-macos.zip"
             echo ""
             echo "Build complete!"
-            echo ""
-            echo "App bundle located at:"
-            echo "  src-tauri/target/universal-apple-darwin/release/bundle/macos/"
             ;;
         Linux)
             echo "Building Linux AppImage..."
@@ -338,18 +378,17 @@ if [ "$MAKEBUNDLE" = true ]; then
                 echo ""
                 echo "Build complete!"
             fi
+            APPIMAGE=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -1)
+            zip_to_releases "$APPIMAGE" "Podcasterator-linux.zip"
             echo ""
-            echo "Bundles located at:"
-            echo "  src-tauri/target/release/bundle/appimage/"
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            echo "Building Windows portable exe..."
+            echo "Note: On Windows, --makebundle is the same as a plain build (portable exe)."
+            echo "Use --makepackage for NSIS/MSI installers."
             npm run tauri build -- --no-bundle
+            zip_to_releases "src-tauri/target/release/podcasterator.exe" "Podcasterator-windows.zip"
             echo ""
             echo "Build complete!"
-            echo ""
-            echo "The portable exe is located at:"
-            echo "  src-tauri/target/release/podcasterator.exe"
             ;;
         *)
             echo "Unknown platform: $OS. Building with default bundles..."

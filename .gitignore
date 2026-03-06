@@ -13,6 +13,9 @@ src-tauri/target/
 # Build outputs
 dist/
 build/
+releases/*
+!releases/.gitkeep
+!releases/*.zip
 *.pkg.tar*
 
 # macOS
