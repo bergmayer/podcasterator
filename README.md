@@ -2,6 +2,8 @@
 
 A cross-platform desktop app that creates a local podcast server from your audio files. Turn any MP3, M4A, MP4, or M4B files into a podcast feed you can subscribe to in a podcast app.
 
+![Screenshot](Screenshot.png)
+
 ## Building
 
 ### Dependencies
@@ -38,7 +40,7 @@ They are deleted when cleared from the interface or when the app quits. The artw
 ### Configuration (State & Settings)
 
 - **macOS**: `~/Library/Application Support/Podcasterator/state.json`
-- **Linux**: `~/.config/Podcasterator/state.json` (follows XDG Base Directory spec)
+- **Linux**: `~/.config/Podcasterator/state.json` 
 - **Windows**: `%APPDATA%\Podcasterator\state.json`
 
 ## Supported Formats

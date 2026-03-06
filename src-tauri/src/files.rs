@@ -162,7 +162,17 @@ pub fn add_artwork(manager: &mut AppStateManager, path: &str) -> Result<(), Stri
         return Err("Unsupported image format".to_string());
     }
 
-    let artwork_path = manager.cache_dir().join(ARTWORK_FILENAME);
+    // Delete old artwork file if present
+    if let Some(ref old_path) = manager.state.artwork_path {
+        let old = PathBuf::from(old_path);
+        if old.exists() {
+            let _ = std::fs::remove_file(&old);
+        }
+    }
+
+    // Use a timestamped filename to avoid webview caching
+    let filename = format!("artwork_{}.jpg", chrono::Utc::now().timestamp_millis());
+    let artwork_path = manager.cache_dir().join(filename);
     crate::image::process_artwork(source_path, &artwork_path)?;
 
     manager.state.artwork_path = Some(artwork_path.to_string_lossy().to_string());
@@ -292,23 +302,8 @@ pub async fn clear_all(manager: &mut AppStateManager) -> Result<(), String> {
         }
     }
 
-    // Always clear state, even if some file deletions failed
+    // Always clear file list, even if some temp file deletions failed
     manager.state.files.clear();
-
-    // Reset podcast name
-    manager.state.podcast_name = String::new();
-
-    // Delete artwork file and clear from state
-    if let Some(ref artwork_path) = manager.state.artwork_path {
-        let path = PathBuf::from(artwork_path);
-        if path.exists() {
-            if let Err(e) = fs::remove_file(&path).await {
-                log::warn!("Failed to delete artwork: {}", e);
-            }
-        }
-    }
-    manager.state.artwork_path = None;
-
     manager.save_state()?;
 
     if !cleanup_errors.is_empty() {

@@ -22,12 +22,25 @@
       await setArtwork(selected);
     }
   }
+
+  async function handleDelete(event: MouseEvent) {
+    event.stopPropagation();
+    await deleteArtwork();
+  }
 </script>
 
 <div class="artwork-container">
   <div class="artwork-display" role="button" tabindex="0" onclick={selectArtwork} onkeydown={(e) => e.key === 'Enter' && selectArtwork()}>
     {#if artworkUrl}
       <img src={artworkUrl} alt="Podcast artwork" />
+      <button
+        class="delete-overlay"
+        onclick={handleDelete}
+        onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleDelete(e as unknown as MouseEvent); } }}
+        title="Delete artwork"
+      >
+        🗑
+      </button>
     {:else}
       <div class="no-artwork">
         <span>No artwork set</span>
@@ -35,10 +48,6 @@
       </div>
     {/if}
   </div>
-
-  {#if $appState.artwork_path}
-    <button class="danger" onclick={deleteArtwork}>Delete Artwork</button>
-  {/if}
 </div>
 
 <style>
@@ -46,7 +55,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
   }
 
   .artwork-display {
@@ -61,6 +69,7 @@
     justify-content: center;
     background: white;
     transition: border-color 0.2s;
+    position: relative;
   }
 
   .artwork-display:hover {
@@ -73,6 +82,31 @@
     object-fit: cover;
   }
 
+  .delete-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 0.2s;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    font-size: 32px;
+    padding: 0;
+    margin: 0;
+    min-width: unset;
+  }
+
+  .artwork-display:hover .delete-overlay {
+    opacity: 1;
+  }
+
   .no-artwork {
     text-align: center;
     color: #999;
@@ -83,9 +117,5 @@
 
   .hint {
     font-size: 12px;
-  }
-
-  button {
-    width: 150px;
   }
 </style>

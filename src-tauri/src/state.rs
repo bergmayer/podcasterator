@@ -46,6 +46,18 @@ impl AppStateManager {
             log::error!("Failed to load state: {}", e);
         }
 
+        // Audio files are ephemeral — clear them and delete temp files on every launch
+        for file in &state.files {
+            let temp_path = PathBuf::from(&file.temp_path);
+            if temp_path.exists() {
+                let _ = fs::remove_file(&temp_path);
+            }
+            if let Some(parent) = temp_path.parent() {
+                let _ = fs::remove_dir(parent);
+            }
+        }
+        state.files.clear();
+
         Self {
             state,
             server_url: None,
@@ -103,25 +115,6 @@ impl AppStateManager {
         self.state.clone()
     }
 
-    /// Remove all temp audio files from disk and clear the file list from state.
-    /// Artwork and podcast name are preserved.
-    pub fn cleanup_temp_files(&mut self) {
-        for file in &self.state.files {
-            let temp_path = PathBuf::from(&file.temp_path);
-            if temp_path.exists() {
-                if let Err(e) = fs::remove_file(&temp_path) {
-                    log::warn!("Failed to remove temp file {}: {}", temp_path.display(), e);
-                }
-            }
-            if let Some(parent) = temp_path.parent() {
-                let _ = fs::remove_dir(parent);
-            }
-        }
-        self.state.files.clear();
-        if let Err(e) = self.save_state() {
-            log::error!("Failed to save state after cleanup: {}", e);
-        }
-    }
 }
 
 fn load_state(path: &PathBuf, state: &mut AppState) -> Result<(), String> {
