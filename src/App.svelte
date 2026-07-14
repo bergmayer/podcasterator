@@ -7,9 +7,16 @@
   import FileList from "./lib/FileList.svelte";
 
   let podcastName = $state("");
+  let lastServerName = "";
 
+  // Sync from backend state, but only when the backend value actually
+  // changes — other commands (e.g. adding files) refresh the whole state
+  // and must not clobber a name the user is still typing.
   $effect(() => {
-    podcastName = $appState.podcast_name;
+    if ($appState.podcast_name !== lastServerName) {
+      lastServerName = $appState.podcast_name;
+      podcastName = $appState.podcast_name;
+    }
   });
 
   onMount(() => {

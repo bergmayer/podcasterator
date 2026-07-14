@@ -156,24 +156,29 @@ pub async fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(),
 }
 
 /// Set artwork from an image file. Does NOT call save_state — caller is responsible.
-pub fn add_artwork(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
-    let source_path = Path::new(path);
-    if !is_image_file(source_path) {
+pub async fn add_artwork(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
+    let source_path = PathBuf::from(path);
+    if !is_image_file(&source_path) {
         return Err("Unsupported image format".to_string());
     }
 
-    // Delete old artwork file if present
+    // Use a timestamped filename to avoid webview caching
+    let filename = format!("artwork_{}.jpg", chrono::Utc::now().timestamp_millis());
+    let artwork_path = manager.cache_dir().join(filename);
+
+    // Image decode/encode is CPU-bound; keep it off the async runtime
+    let dst = artwork_path.clone();
+    tokio::task::spawn_blocking(move || crate::image::process_artwork(&source_path, &dst))
+        .await
+        .map_err(|e| format!("Artwork task failed: {}", e))??;
+
+    // Delete old artwork file only after the new one was written successfully
     if let Some(ref old_path) = manager.state.artwork_path {
         let old = PathBuf::from(old_path);
         if old.exists() {
             let _ = std::fs::remove_file(&old);
         }
     }
-
-    // Use a timestamped filename to avoid webview caching
-    let filename = format!("artwork_{}.jpg", chrono::Utc::now().timestamp_millis());
-    let artwork_path = manager.cache_dir().join(filename);
-    crate::image::process_artwork(source_path, &artwork_path)?;
 
     manager.state.artwork_path = Some(artwork_path.to_string_lossy().to_string());
     Ok(())
@@ -225,10 +230,17 @@ pub async fn rename_file(
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
-    let new_display_name = if Path::new(&new_name).extension().is_none() {
-        format!("{}.{}", new_name, extension)
-    } else {
+    // Keep the original audio extension unless the new name already ends
+    // with it — names like "Part 2.5" must not turn ".5" into the extension.
+    let already_has_extension = Path::new(&new_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case(extension));
+
+    let new_display_name = if extension.is_empty() || already_has_extension {
         new_name
+    } else {
+        format!("{}.{}", new_name, extension)
     };
 
     let old_temp_path = PathBuf::from(&file.temp_path);
@@ -274,7 +286,7 @@ pub fn alphabetize(manager: &mut AppStateManager) -> Result<(), String> {
     manager
         .state
         .files
-        .sort_by(|a, b| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()));
+        .sort_by_key(|f| f.display_name.to_lowercase());
     manager.save_state()?;
 
     Ok(())
@@ -316,11 +328,12 @@ pub async fn clear_all(manager: &mut AppStateManager) -> Result<(), String> {
     Ok(())
 }
 
-/// Get MIME type for audio file
+/// Get MIME type for served files
 pub fn get_mime_type(path: &Path) -> &'static str {
     match get_extension_lower(path).as_deref() {
         Some("mp3") => "audio/mpeg",
         Some("m4a") | Some("mp4") | Some("m4b") => "audio/mp4",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
         _ => "application/octet-stream",
     }
 }

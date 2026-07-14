@@ -8,9 +8,9 @@
 
   onMount(() => {
     const unlisten = getCurrentWebview().onDragDropEvent(async (event) => {
-      if (event.payload.type === "over") {
+      if (event.payload.type === "enter" || event.payload.type === "over") {
         isDragOver = true;
-      } else if (event.payload.type === "leave" || event.payload.type === "cancel") {
+      } else if (event.payload.type === "leave") {
         isDragOver = false;
       } else if (event.payload.type === "drop") {
         isDragOver = false;

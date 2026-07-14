@@ -43,11 +43,10 @@ They are deleted when cleared from the interface or when the app quits. The artw
 ## How It Works
 
 1. Audio files are copied to a temp directory with unique IDs
-2. File modification times are adjusted to control episode order
-3. RSS feed is generated with enclosures pointing to local files
-4. HTTP server serves the feed and audio files on port 8080
-5. Your podcast app downloads episodes like any other podcast
-6. Once podcast episodes are downloaded by your app, you can stop the server
+2. RSS feed is generated with enclosures pointing to local files, in the order shown in the app
+3. HTTP server serves the feed and audio files on a free port on your local network
+4. Your podcast app downloads episodes like any other podcast
+5. Once podcast episodes are downloaded by your app, you can stop the server
 
 ## License
 

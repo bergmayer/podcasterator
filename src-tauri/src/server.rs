@@ -1,23 +1,22 @@
 use crate::files::{get_mime_type, ARTWORK_FILENAME};
 use crate::state::AppState;
 use axum::{
-    body::Body,
-    extract::{Path as AxumPath, State as AxumState},
-    http::{header, StatusCode},
+    extract::{Path as AxumPath, Request, State as AxumState},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use chrono::DateTime;
 use rss::{ChannelBuilder, EnclosureBuilder, GuidBuilder, ImageBuilder, ItemBuilder};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::watch;
+use tower::util::ServiceExt;
+use tower_http::services::ServeFile;
 
 pub struct ServerState {
     pub state_rx: watch::Receiver<AppState>,
-    pub cache_dir: PathBuf,
     pub base_url: String,
 }
 
@@ -37,15 +36,7 @@ fn generate_feed(app_state: &AppState, base_url: &str) -> String {
         let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let mime_type = get_mime_type(&path);
 
-        // Use the stored added_at timestamp for stable pub dates
-        let pub_date = if !file.added_at.is_empty() {
-            file.added_at.clone()
-        } else {
-            // Fallback for files without timestamp
-            DateTime::parse_from_rfc2822("Mon, 01 Jan 2024 00:00:00 +0000")
-                .unwrap()
-                .to_rfc2822()
-        };
+        let pub_date = (!file.added_at.is_empty()).then(|| file.added_at.clone());
 
         let file_url = format!(
             "{}/files/{}/{}",
@@ -69,7 +60,7 @@ fn generate_feed(app_state: &AppState, base_url: &str) -> String {
             .title(Some(file.display_name.clone()))
             .link(Some(file_url.clone()))
             .guid(Some(guid))
-            .pub_date(Some(pub_date))
+            .pub_date(pub_date)
             .enclosure(Some(enclosure))
             .build();
 
@@ -105,68 +96,68 @@ async fn feed_handler(AxumState(state): AxumState<Arc<ServerState>>) -> impl Int
     let app_state = state.state_rx.borrow().clone();
     let feed = generate_feed(&app_state, &state.base_url);
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")
-        .body(Body::from(feed))
-        .unwrap()
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
+        feed,
+    )
 }
 
-/// Serve audio files
+/// Serve audio files.
+///
+/// The file is looked up by ID in the app state rather than by joining
+/// request input onto the cache directory, so a request can never address
+/// anything outside the current file list. The filename path segment only
+/// exists to give podcast apps a nice download name.
 async fn file_handler(
     AxumState(state): AxumState<Arc<ServerState>>,
-    AxumPath((uuid, filename)): AxumPath<(String, String)>,
-) -> impl IntoResponse {
-    // Security: Clean the path to prevent directory traversal
-    let clean_uuid = path_clean::clean(&uuid);
-    let clean_filename = path_clean::clean(&filename);
+    AxumPath((uuid, _filename)): AxumPath<(String, String)>,
+    req: Request,
+) -> Response {
+    let temp_path = state
+        .state_rx
+        .borrow()
+        .files
+        .iter()
+        .find(|f| f.id == uuid)
+        .map(|f| PathBuf::from(&f.temp_path));
 
-    if clean_uuid.to_string_lossy().contains("..") || clean_filename.to_string_lossy().contains("..") {
-        return (StatusCode::FORBIDDEN, "Invalid path").into_response();
+    match temp_path {
+        Some(path) => serve_file(&path, req).await,
+        None => (StatusCode::NOT_FOUND, "File not found").into_response(),
     }
-
-    let file_path = state.cache_dir.join(clean_uuid).join(clean_filename);
-
-    serve_file(&file_path).await
-}
-
-async fn serve_file(file_path: &PathBuf) -> Response {
-    let file = match tokio::fs::File::open(file_path).await {
-        Ok(file) => file,
-        Err(_) => return (StatusCode::NOT_FOUND, "File not found").into_response(),
-    };
-
-    let stream = tokio_util::io::ReaderStream::new(file);
-    let body = Body::from_stream(stream);
-
-    let mime_type = get_mime_type(file_path);
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, mime_type)
-        .body(body)
-        .unwrap()
-        .into_response()
 }
 
 /// Serve artwork
 async fn artwork_handler(
     AxumState(state): AxumState<Arc<ServerState>>,
-) -> impl IntoResponse {
-    let app_state = state.state_rx.borrow().clone();
+    req: Request,
+) -> Response {
+    let artwork_path = state.state_rx.borrow().artwork_path.clone();
 
-    let artwork_path = match &app_state.artwork_path {
-        Some(p) => PathBuf::from(p),
-        None => return (StatusCode::NOT_FOUND, "No artwork").into_response(),
-    };
+    match artwork_path {
+        Some(p) => serve_file(Path::new(&p), req).await,
+        None => (StatusCode::NOT_FOUND, "No artwork").into_response(),
+    }
+}
 
-    serve_file(&artwork_path).await
+/// Serve a file with Range, HEAD, and Content-Length support.
+async fn serve_file(path: &Path, req: Request) -> Response {
+    let mime = get_mime_type(path)
+        .parse::<mime::Mime>()
+        .unwrap_or(mime::APPLICATION_OCTET_STREAM);
+
+    match ServeFile::new_with_mime(path, &mime).oneshot(req).await {
+        Ok(res) => res.into_response(),
+        Err(e) => {
+            log::error!("Failed to serve {}: {}", path.display(), e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
+        }
+    }
 }
 
 /// Start the HTTP server. Returns (feed_url, shutdown_sender, state_sender).
 pub async fn launch_server(
     app_state: AppState,
-    cache_dir: PathBuf,
 ) -> Result<(String, tokio::sync::oneshot::Sender<()>, watch::Sender<AppState>), String> {
     let ip = get_local_ip()?;
 
@@ -174,14 +165,16 @@ pub async fn launch_server(
         .await
         .map_err(|e| format!("Failed to bind to a port: {}", e))?;
 
-    let port = listener.local_addr().unwrap().port();
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to get local address: {}", e))?
+        .port();
     let base_url = format!("http://{}:{}", ip, port);
 
     let (state_tx, state_rx) = watch::channel(app_state);
 
     let server_state = Arc::new(ServerState {
         state_rx,
-        cache_dir,
         base_url: base_url.clone(),
     });
 

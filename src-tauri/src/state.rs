@@ -1,7 +1,6 @@
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioFile {
@@ -13,12 +12,27 @@ pub struct AudioFile {
     pub added_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+fn default_podcast_name() -> String {
+    "My Podcast".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppState {
     pub files: Vec<AudioFile>,
+    #[serde(default = "default_podcast_name")]
     pub podcast_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            files: Vec::new(),
+            podcast_name: default_podcast_name(),
+            artwork_path: None,
+        }
+    }
 }
 
 pub struct AppStateManager {
@@ -46,17 +60,11 @@ impl AppStateManager {
             log::error!("Failed to load state: {}", e);
         }
 
-        // Audio files are ephemeral — clear them and delete temp files on every launch
-        for file in &state.files {
-            let temp_path = PathBuf::from(&file.temp_path);
-            if temp_path.exists() {
-                let _ = fs::remove_file(&temp_path);
-            }
-            if let Some(parent) = temp_path.parent() {
-                let _ = fs::remove_dir(parent);
-            }
-        }
+        // Audio files are ephemeral — drop them on every launch and sweep the
+        // cache directory so leftovers from a crash don't accumulate. Only the
+        // current artwork survives.
         state.files.clear();
+        sweep_cache(&cache_dir, state.artwork_path.as_deref());
 
         Self {
             state,
@@ -114,7 +122,34 @@ impl AppStateManager {
     pub fn get_state(&self) -> AppState {
         self.state.clone()
     }
+}
 
+/// Delete everything in the cache directory except the current artwork.
+fn sweep_cache(cache_dir: &Path, artwork_path: Option<&str>) {
+    let artwork = artwork_path.map(PathBuf::from);
+
+    let entries = match fs::read_dir(cache_dir) {
+        Ok(entries) => entries,
+        Err(e) => {
+            log::warn!("Failed to read cache directory: {}", e);
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if artwork.as_deref() == Some(path.as_path()) {
+            continue;
+        }
+        let result = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        if let Err(e) = result {
+            log::warn!("Failed to remove cache entry {}: {}", path.display(), e);
+        }
+    }
 }
 
 fn load_state(path: &PathBuf, state: &mut AppState) -> Result<(), String> {
@@ -127,36 +162,11 @@ fn load_state(path: &PathBuf, state: &mut AppState) -> Result<(), String> {
     let mut loaded_state: AppState =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse state file: {}", e))?;
 
-    // Validate that temp files still exist
-    let before_count = loaded_state.files.len();
-    loaded_state.files.retain(|f| {
-        let exists = PathBuf::from(&f.temp_path).exists();
-        if !exists {
-            log::warn!("Temp file missing, removing from state: {}", f.display_name);
-        }
-        exists
-    });
-    if loaded_state.files.len() < before_count {
-        log::warn!(
-            "Removed {} missing files from state",
-            before_count - loaded_state.files.len()
-        );
-    }
-
     // Validate artwork exists
     if let Some(ref artwork) = loaded_state.artwork_path {
         if !PathBuf::from(artwork).exists() {
             log::warn!("Artwork file missing, clearing from state");
             loaded_state.artwork_path = None;
-        }
-    }
-
-    // Backwards compat: assign added_at for files that don't have it
-    let file_count = loaded_state.files.len();
-    for (i, file) in loaded_state.files.iter_mut().enumerate() {
-        if file.added_at.is_empty() {
-            let ts = Utc::now() - chrono::Duration::hours(file_count as i64 - i as i64);
-            file.added_at = ts.to_rfc2822();
         }
     }
 

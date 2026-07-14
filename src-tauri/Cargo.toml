@@ -2,7 +2,7 @@
 name = "podcasterator"
 version = "0.1.0"
 description = "Local podcast server for organizing and serving audio files"
-authors = ["you"]
+authors = ["John Bergmayer"]
 edition = "2021"
 
 [lib]
@@ -15,8 +15,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
-tauri-plugin-shell = "2"
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -25,16 +23,16 @@ image = "0.25"
 rss = "2"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["fs"] }
+mime = "0.3"
 dirs = "6"
 walkdir = "2"
 local-ip-address = "0.6"
 chrono = "0.4"
-filetime = "0.2"
 urlencoding = "2"
 log = "0.4"
 env_logger = "0.11"
-path-clean = "1.0.1"
-tokio-util = { version = "0.7.17", features = ["full"] }
 
 [profile.release]
 panic = "abort"

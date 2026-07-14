@@ -33,9 +33,11 @@ pub async fn add_files(
                 errors.push(e);
             }
         } else if files::is_image_file(p) {
-            if let Err(e) = files::add_artwork(&mut manager, &path) {
+            if let Err(e) = files::add_artwork(&mut manager, &path).await {
                 errors.push(e);
             }
+        } else {
+            errors.push(format!("Unsupported file type: {}", path));
         }
     }
 
@@ -114,7 +116,7 @@ pub async fn set_artwork(
     path: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::add_artwork(&mut manager, &path)?;
+    files::add_artwork(&mut manager, &path).await?;
     manager.save_state()?;
     Ok(manager.get_state())
 }
@@ -148,10 +150,9 @@ pub async fn start_server(
         return Err("Server is already running".to_string());
     }
 
-    let cache_dir = manager.cache_dir().clone();
     let app_state = manager.state.clone();
 
-    let (url, shutdown_tx, state_tx) = launch_server(app_state, cache_dir).await?;
+    let (url, shutdown_tx, state_tx) = launch_server(app_state).await?;
 
     manager.server_url = Some(url.clone());
     manager.server_shutdown = Some(shutdown_tx);

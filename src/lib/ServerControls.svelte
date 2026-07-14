@@ -1,9 +1,14 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { serverUrl, isServerRunning, startServer, stopServer } from "../stores/app";
 
   let copyStatus = $state<"idle" | "copied" | "failed">("idle");
   let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  onDestroy(() => {
+    if (copyTimeout) clearTimeout(copyTimeout);
+  });
 
   async function copyUrl() {
     if ($serverUrl) {
