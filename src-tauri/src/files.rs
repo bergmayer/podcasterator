@@ -1,5 +1,6 @@
 use crate::state::{AppStateManager, AudioFile};
 use chrono::Utc;
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use uuid::Uuid;
@@ -63,6 +64,79 @@ fn validate_filename(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Compare names case-insensitively, treating each run of ASCII digits as a
+/// number. This keeps "Episode 2" before "Episode 10" without requiring
+/// filenames to zero-pad their episode numbers.
+fn natural_name_cmp(a: &str, b: &str) -> Ordering {
+    let a_lower = a.to_lowercase();
+    let b_lower = b.to_lowercase();
+    let a_bytes = a_lower.as_bytes();
+    let b_bytes = b_lower.as_bytes();
+    let mut a_index = 0;
+    let mut b_index = 0;
+
+    while a_index < a_bytes.len() && b_index < b_bytes.len() {
+        if a_bytes[a_index].is_ascii_digit() && b_bytes[b_index].is_ascii_digit() {
+            let a_start = a_index;
+            let b_start = b_index;
+
+            while a_index < a_bytes.len() && a_bytes[a_index].is_ascii_digit() {
+                a_index += 1;
+            }
+            while b_index < b_bytes.len() && b_bytes[b_index].is_ascii_digit() {
+                b_index += 1;
+            }
+
+            let a_digits = &a_bytes[a_start..a_index];
+            let b_digits = &b_bytes[b_start..b_index];
+            let a_significant = &a_digits[a_digits
+                .iter()
+                .position(|digit| *digit != b'0')
+                .unwrap_or(a_digits.len())..];
+            let b_significant = &b_digits[b_digits
+                .iter()
+                .position(|digit| *digit != b'0')
+                .unwrap_or(b_digits.len())..];
+
+            match a_significant.len().cmp(&b_significant.len()) {
+                Ordering::Equal => {}
+                ordering => return ordering,
+            }
+            match a_significant.cmp(b_significant) {
+                Ordering::Equal => {}
+                ordering => return ordering,
+            }
+        } else {
+            match a_bytes[a_index].cmp(&b_bytes[b_index]) {
+                Ordering::Equal => {
+                    a_index += 1;
+                    b_index += 1;
+                }
+                ordering => return ordering,
+            }
+        }
+    }
+
+    a_bytes
+        .len()
+        .cmp(&b_bytes.len())
+        .then_with(|| a_lower.cmp(&b_lower))
+        .then_with(|| a.cmp(b))
+}
+
+fn path_name(path: &Path) -> String {
+    path.file_name()
+        .unwrap_or(path.as_os_str())
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Normalize a file-picker or drag/drop batch because native APIs do not
+/// guarantee the order in which selected paths are returned.
+pub fn sort_paths_naturally(paths: &mut [String]) {
+    paths.sort_by(|a, b| natural_name_cmp(&path_name(Path::new(a)), &path_name(Path::new(b))));
+}
+
 /// Add a single audio file. Does NOT call save_state — caller is responsible.
 pub async fn add_file(manager: &mut AppStateManager, path: &str) -> Result<(), String> {
     let source_path = PathBuf::from(path);
@@ -119,7 +193,7 @@ pub async fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(),
     let mut errors = Vec::new();
 
     // Collect paths first (WalkDir is sync, which is fine for directory listing)
-    let paths: Vec<PathBuf> = WalkDir::new(&folder_path)
+    let mut paths: Vec<PathBuf> = WalkDir::new(&folder_path)
         .max_depth(1)
         .into_iter()
         .filter_map(|entry| match entry {
@@ -137,6 +211,8 @@ pub async fn add_folder(manager: &mut AppStateManager, path: &str) -> Result<(),
             }
         })
         .collect();
+
+    paths.sort_by(|a, b| natural_name_cmp(&path_name(a), &path_name(b)));
 
     for p in paths {
         if let Some(path_str) = p.to_str() {
@@ -198,10 +274,17 @@ pub async fn delete_artwork(manager: &mut AppStateManager) -> Result<(), String>
     Ok(())
 }
 
-pub async fn delete_file(manager: &mut AppStateManager, index: usize) -> Result<(), String> {
-    if index >= manager.state.files.len() {
-        return Err("Index out of bounds".to_string());
-    }
+pub fn file_index(manager: &AppStateManager, id: &str) -> Result<usize, String> {
+    manager
+        .state
+        .files
+        .iter()
+        .position(|file| file.id == id)
+        .ok_or_else(|| "File not found".to_string())
+}
+
+pub async fn delete_file(manager: &mut AppStateManager, id: &str) -> Result<(), String> {
+    let index = file_index(manager, id)?;
 
     let temp_path = PathBuf::from(&manager.state.files[index].temp_path);
     cleanup_temp_file(&temp_path).await;
@@ -214,12 +297,10 @@ pub async fn delete_file(manager: &mut AppStateManager, index: usize) -> Result<
 
 pub async fn rename_file(
     manager: &mut AppStateManager,
-    index: usize,
+    id: &str,
     new_name: String,
 ) -> Result<(), String> {
-    if index >= manager.state.files.len() {
-        return Err("Index out of bounds".to_string());
-    }
+    let index = file_index(manager, id)?;
 
     validate_filename(&new_name)?;
 
@@ -286,7 +367,7 @@ pub fn alphabetize(manager: &mut AppStateManager) -> Result<(), String> {
     manager
         .state
         .files
-        .sort_by_key(|f| f.display_name.to_lowercase());
+        .sort_by(|a, b| natural_name_cmp(&a.display_name, &b.display_name));
     manager.save_state()?;
 
     Ok(())
@@ -335,5 +416,64 @@ pub fn get_mime_type(path: &Path) -> &'static str {
         Some("m4a") | Some("mp4") | Some("m4b") => "audio/mp4",
         Some("jpg") | Some("jpeg") => "image/jpeg",
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{natural_name_cmp, sort_paths_naturally};
+
+    #[test]
+    fn natural_name_sort_orders_numbered_episodes() {
+        let mut names = vec![
+            "The Beatles Anthology Revisited Episode 10.mp3",
+            "The Beatles Anthology Revisited Episode 2.mp3",
+            "The Beatles Anthology Revisited Episode 01.mp3",
+            "The Beatles Anthology Revisited Episode 18.mp3",
+        ];
+
+        names.sort_by(|a, b| natural_name_cmp(a, b));
+
+        assert_eq!(
+            names,
+            vec![
+                "The Beatles Anthology Revisited Episode 01.mp3",
+                "The Beatles Anthology Revisited Episode 2.mp3",
+                "The Beatles Anthology Revisited Episode 10.mp3",
+                "The Beatles Anthology Revisited Episode 18.mp3",
+            ]
+        );
+    }
+
+    #[test]
+    fn natural_name_sort_is_case_insensitive_and_deterministic() {
+        let mut names = vec!["episode 2.mp3", "Episode 1.mp3", "EPISODE 2.mp3"];
+
+        names.sort_by(|a, b| natural_name_cmp(a, b));
+
+        assert_eq!(
+            names,
+            vec!["Episode 1.mp3", "EPISODE 2.mp3", "episode 2.mp3"]
+        );
+    }
+
+    #[test]
+    fn selected_paths_are_naturally_sorted_by_filename() {
+        let mut paths = vec![
+            "/podcast/The Beatles Episode 10.mp3".to_string(),
+            "/podcast/The Beatles Episode 2.mp3".to_string(),
+            "/podcast/The Beatles Episode 01.mp3".to_string(),
+        ];
+
+        sort_paths_naturally(&mut paths);
+
+        assert_eq!(
+            paths,
+            vec![
+                "/podcast/The Beatles Episode 01.mp3",
+                "/podcast/The Beatles Episode 2.mp3",
+                "/podcast/The Beatles Episode 10.mp3",
+            ]
+        );
     }
 }

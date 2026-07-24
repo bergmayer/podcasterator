@@ -23,7 +23,7 @@ prepare() {
 
 build() {
     cd "$_projdir"
-    npm install
+    npm ci
     npm run tauri build -- --no-bundle
 }
 

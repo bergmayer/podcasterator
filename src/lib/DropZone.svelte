@@ -3,20 +3,27 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount } from "svelte";
   import { addFiles } from "../stores/app";
+  import { isPositionInside } from "./dragPosition";
 
   let isDragOver = $state(false);
+  let dropZoneElement: HTMLDivElement | null = null;
 
   onMount(() => {
     const unlisten = getCurrentWebview().onDragDropEvent(async (event) => {
-      if (event.payload.type === "enter" || event.payload.type === "over") {
-        isDragOver = true;
-      } else if (event.payload.type === "leave") {
+      const payload = event.payload;
+
+      if (payload.type === "enter" || payload.type === "over") {
+        isDragOver = isPositionInside(payload.position, dropZoneElement);
+      } else if (payload.type === "leave") {
         isDragOver = false;
-      } else if (event.payload.type === "drop") {
+      } else if (payload.type === "drop") {
+        const droppedHere = isPositionInside(
+          payload.position,
+          dropZoneElement
+        );
         isDragOver = false;
-        const paths = event.payload.paths;
-        if (paths && paths.length > 0) {
-          await addFiles(paths);
+        if (droppedHere && payload.paths.length > 0) {
+          await addFiles(payload.paths);
         }
       }
     });
@@ -75,8 +82,9 @@
 <div
   class="drop-zone"
   class:dragover={isDragOver}
-  role="button"
-  tabindex="0"
+  bind:this={dropZoneElement}
+  role="group"
+  aria-label="Add audio files"
   ondragover={handleDragOver}
   ondragleave={handleDragLeave}
   ondrop={handleDrop}

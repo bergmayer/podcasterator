@@ -282,7 +282,7 @@ if [ "$MAKEPACKAGE" = true ]; then
                     ;;
                 ubuntu|debian|pop|linuxmint)
                     echo "Building .deb package..."
-                    npm install
+                    npm ci
                     npm run tauri build -- --bundles deb
                     DEB=$(find src-tauri/target/release/bundle/deb -name "*.deb" | head -1)
                     zip_to_releases "$DEB" "Podcasterator-linux-deb.zip"
@@ -294,7 +294,7 @@ if [ "$MAKEPACKAGE" = true ]; then
                     ;;
                 fedora|rhel|centos|rocky|alma)
                     echo "Building .rpm package..."
-                    npm install
+                    npm ci
                     npm run tauri build -- --bundles rpm
                     RPM=$(find src-tauri/target/release/bundle/rpm -name "*.rpm" | head -1)
                     zip_to_releases "$RPM" "Podcasterator-linux-rpm.zip"
@@ -313,7 +313,7 @@ if [ "$MAKEPACKAGE" = true ]; then
             ;;
         Darwin)
             echo "Building macOS DMG..."
-            npm install
+            npm ci
             rustup target add aarch64-apple-darwin x86_64-apple-darwin 2>/dev/null || true
             npm run tauri build -- --target universal-apple-darwin --bundles dmg
             DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
@@ -323,7 +323,7 @@ if [ "$MAKEPACKAGE" = true ]; then
             ;;
         MINGW*|MSYS*|CYGWIN*)
             echo "Building Windows installers..."
-            npm install
+            npm ci
             npm run tauri build -- --bundles nsis,msi
             NSIS_EXE=$(find src-tauri/target/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
             zip_to_releases "$NSIS_EXE" "Podcasterator-windows-nsis.zip"
@@ -339,7 +339,7 @@ fi
 # --- Build ---
 
 echo "Installing npm dependencies..."
-npm install
+npm ci
 
 if [ "$MAKEBUNDLE" = true ]; then
     mkdir -p "$RELEASES_DIR"

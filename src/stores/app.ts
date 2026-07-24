@@ -72,22 +72,22 @@ export async function addFiles(paths: string[]): Promise<void> {
   await invokeAndSync("add_files", { paths });
 }
 
-export async function deleteFile(index: number): Promise<void> {
-  await invokeAndSync("delete_file", { index });
+export async function deleteFile(id: string): Promise<void> {
+  await invokeAndSync("delete_file", { id });
 }
 
 export async function renameFile(
-  index: number,
+  id: string,
   newName: string
 ): Promise<void> {
-  await invokeAndSync("rename_file", { index, newName });
+  await invokeAndSync("rename_file", { id, newName });
 }
 
 export async function moveFile(
-  index: number,
+  id: string,
   direction: "up" | "down"
 ): Promise<void> {
-  await invokeAndSync("move_file", { index, direction });
+  await invokeAndSync("move_file", { id, direction });
 }
 
 export async function alphabetize(): Promise<void> {

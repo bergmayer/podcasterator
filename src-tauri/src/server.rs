@@ -30,13 +30,23 @@ pub fn get_local_ip() -> Result<String, String> {
 /// Generate RSS feed XML
 fn generate_feed(app_state: &AppState, base_url: &str) -> String {
     let mut items = Vec::new();
+    let publish_anchor = app_state
+        .files
+        .iter()
+        .filter_map(|file| chrono::DateTime::parse_from_rfc2822(&file.added_at).ok())
+        .max();
 
-    for file in &app_state.files {
+    for (index, file) in app_state.files.iter().enumerate() {
         let path = PathBuf::from(&file.temp_path);
         let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let mime_type = get_mime_type(&path);
 
-        let pub_date = (!file.added_at.is_empty()).then(|| file.added_at.clone());
+        // Podcast clients commonly sort items newest-first by pubDate instead
+        // of respecting XML order. Give each item a unique date based on its
+        // current list position so the feed order always matches the UI.
+        let pub_date = publish_anchor
+            .as_ref()
+            .map(|anchor| (*anchor - chrono::Duration::seconds(index as i64)).to_rfc2822());
 
         let file_url = format!(
             "{}/files/{}/{}",
@@ -97,7 +107,10 @@ async fn feed_handler(AxumState(state): AxumState<Arc<ServerState>>) -> impl Int
     let feed = generate_feed(&app_state, &state.base_url);
 
     (
-        [(axum::http::header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "application/rss+xml; charset=utf-8",
+        )],
         feed,
     )
 }
@@ -128,10 +141,7 @@ async fn file_handler(
 }
 
 /// Serve artwork
-async fn artwork_handler(
-    AxumState(state): AxumState<Arc<ServerState>>,
-    req: Request,
-) -> Response {
+async fn artwork_handler(AxumState(state): AxumState<Arc<ServerState>>, req: Request) -> Response {
     let artwork_path = state.state_rx.borrow().artwork_path.clone();
 
     match artwork_path {
@@ -158,7 +168,14 @@ async fn serve_file(path: &Path, req: Request) -> Response {
 /// Start the HTTP server. Returns (feed_url, shutdown_sender, state_sender).
 pub async fn launch_server(
     app_state: AppState,
-) -> Result<(String, tokio::sync::oneshot::Sender<()>, watch::Sender<AppState>), String> {
+) -> Result<
+    (
+        String,
+        tokio::sync::oneshot::Sender<()>,
+        watch::Sender<AppState>,
+    ),
+    String,
+> {
     let ip = get_local_ip()?;
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
@@ -198,4 +215,52 @@ pub async fn launch_server(
     });
 
     Ok((format!("{}/feed.xml", base_url), shutdown_tx, state_tx))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_feed;
+    use crate::state::{AppState, AudioFile};
+    use std::io::Cursor;
+
+    fn audio_file(id: &str, name: &str, added_at: &str) -> AudioFile {
+        AudioFile {
+            id: id.to_string(),
+            original_path: format!("/original/{name}"),
+            temp_path: format!("/temporary/{id}/{name}"),
+            display_name: name.to_string(),
+            added_at: added_at.to_string(),
+        }
+    }
+
+    #[test]
+    fn feed_dates_preserve_the_displayed_file_order() {
+        let state = AppState {
+            files: vec![
+                audio_file("one", "Episode 01.mp3", "Wed, 01 Jul 2026 12:00:00 +0000"),
+                audio_file("two", "Episode 02.mp3", "Thu, 02 Jul 2026 12:00:00 +0000"),
+                audio_file("three", "Episode 03.mp3", "Fri, 03 Jul 2026 12:00:00 +0000"),
+            ],
+            podcast_name: "Test Podcast".to_string(),
+            artwork_path: None,
+        };
+
+        let xml = generate_feed(&state, "http://127.0.0.1:1234");
+        let channel = rss::Channel::read_from(Cursor::new(xml)).unwrap();
+        let items = channel.items();
+
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.title().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["Episode 01.mp3", "Episode 02.mp3", "Episode 03.mp3"]
+        );
+
+        let dates = items
+            .iter()
+            .map(|item| chrono::DateTime::parse_from_rfc2822(item.pub_date().unwrap()).unwrap())
+            .collect::<Vec<_>>();
+        assert!(dates.windows(2).all(|pair| pair[0] > pair[1]));
+    }
 }

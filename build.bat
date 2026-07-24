@@ -88,7 +88,7 @@ if "%HAS_ERRORS%"=="true" (
 REM --- Build ---
 
 echo Installing npm dependencies...
-call npm install || exit /b 1
+call npm ci || exit /b 1
 
 if not exist "%RELEASES_DIR%" mkdir "%RELEASES_DIR%"
 

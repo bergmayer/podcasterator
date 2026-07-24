@@ -9,33 +9,28 @@
     clearAll,
   } from "../stores/app";
 
-  let editingIndex = $state<number | null>(null);
+  let editingFileId = $state<string | null>(null);
   let editingName = $state("");
 
-  function startRename(index: number, currentName: string) {
-    editingIndex = index;
+  function startRename(fileId: string, currentName: string) {
+    editingFileId = fileId;
     // Remove extension for editing
     const lastDot = currentName.lastIndexOf(".");
     editingName = lastDot > 0 ? currentName.substring(0, lastDot) : currentName;
   }
 
-  async function saveRename(index: number) {
-    if (editingIndex !== index) return; // Already cancelled
+  async function saveRename(fileId: string) {
+    if (editingFileId !== fileId) return; // Already cancelled
     if (editingName.trim()) {
-      await renameFile(index, editingName.trim());
+      await renameFile(fileId, editingName.trim());
     }
-    editingIndex = null;
+    editingFileId = null;
     editingName = "";
   }
 
   function cancelRename() {
-    editingIndex = null;
+    editingFileId = null;
     editingName = "";
-  }
-
-  function truncateName(name: string, maxLength: number = 40): string {
-    if (name.length <= maxLength) return name;
-    return name.substring(0, maxLength - 3) + "...";
   }
 </script>
 
@@ -61,7 +56,7 @@
         <div class="file-controls">
           <button
             class="icon-button"
-            onclick={() => moveFile(index, "up")}
+            onclick={() => moveFile(file.id, "up")}
             disabled={index === 0}
             title="Move up"
           >
@@ -69,7 +64,7 @@
           </button>
           <button
             class="icon-button"
-            onclick={() => moveFile(index, "down")}
+            onclick={() => moveFile(file.id, "down")}
             disabled={index === $appState.files.length - 1}
             title="Move down"
           >
@@ -77,34 +72,34 @@
           </button>
         </div>
 
-        {#if editingIndex === index}
+        {#if editingFileId === file.id}
           <input
             type="text"
             class="rename-input"
             bind:value={editingName}
             onkeydown={(e) => {
-              if (e.key === "Enter") saveRename(index);
+              if (e.key === "Enter") saveRename(file.id);
               if (e.key === "Escape") cancelRename();
             }}
-            onblur={() => saveRename(index)}
+            onblur={() => saveRename(file.id)}
           />
         {:else}
           <span class="file-name" title={file.display_name}>
-            {truncateName(file.display_name)}
+            {file.display_name}
           </span>
         {/if}
 
         <div class="file-actions">
           <button
             class="icon-button"
-            onclick={() => startRename(index, file.display_name)}
+            onclick={() => startRename(file.id, file.display_name)}
             title="Rename"
           >
             ✏️
           </button>
           <button
             class="icon-button"
-            onclick={() => deleteFile(index)}
+            onclick={() => deleteFile(file.id)}
             title="Delete"
           >
             ×
@@ -178,6 +173,7 @@
 
   .file-name {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -185,11 +181,14 @@
 
   .rename-input {
     flex: 1;
+    min-width: 0;
     padding: 4px 8px;
   }
 
+  .file-controls,
   .file-actions {
     display: flex;
+    flex: 0 0 auto;
     gap: 2px;
   }
 

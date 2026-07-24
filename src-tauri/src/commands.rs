@@ -16,10 +16,14 @@ pub async fn get_state(state: tauri::State<'_, StateManager>) -> Result<AppState
 #[tauri::command]
 pub async fn add_files(
     state: tauri::State<'_, StateManager>,
-    paths: Vec<String>,
+    mut paths: Vec<String>,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
     let mut errors = Vec::new();
+
+    // Native file pickers and drag/drop APIs do not guarantee a consistent
+    // order across platforms. Normalize the batch before adding it.
+    files::sort_paths_naturally(&mut paths);
 
     for path in paths {
         let p = Path::new(&path);
@@ -54,31 +58,32 @@ pub async fn add_files(
 #[tauri::command]
 pub async fn delete_file(
     state: tauri::State<'_, StateManager>,
-    index: usize,
+    id: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::delete_file(&mut manager, index).await?;
+    files::delete_file(&mut manager, &id).await?;
     Ok(manager.get_state())
 }
 
 #[tauri::command]
 pub async fn rename_file(
     state: tauri::State<'_, StateManager>,
-    index: usize,
+    id: String,
     new_name: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
-    files::rename_file(&mut manager, index, new_name).await?;
+    files::rename_file(&mut manager, &id, new_name).await?;
     Ok(manager.get_state())
 }
 
 #[tauri::command]
 pub async fn move_file(
     state: tauri::State<'_, StateManager>,
-    index: usize,
+    id: String,
     direction: String,
 ) -> Result<AppState, String> {
     let mut manager = state.lock().await;
+    let index = files::file_index(&manager, &id)?;
 
     match direction.as_str() {
         "up" => files::move_up(&mut manager, index)?,
@@ -141,9 +146,7 @@ pub async fn set_podcast_name(
 }
 
 #[tauri::command]
-pub async fn start_server(
-    state: tauri::State<'_, StateManager>,
-) -> Result<String, String> {
+pub async fn start_server(state: tauri::State<'_, StateManager>) -> Result<String, String> {
     let mut manager = state.lock().await;
 
     if manager.server_url.is_some() {

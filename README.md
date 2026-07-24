@@ -16,6 +16,15 @@ With no flags, both scripts build a raw binary only. Output from `--makebundle` 
 - `--check` — Check build dependencies without building
 - `--clean` — Remove all build artifacts
 
+The GitHub Actions **Build desktop apps** workflow can also be run manually.
+It builds and checks the same source natively on macOS, Linux, and Windows,
+then provides the installers as downloadable workflow artifacts. Pushing a
+version tag such as `v0.1.0` runs the same build automatically.
+
+The macOS workflow artifacts are ad-hoc signed. Windows and macOS artifacts are
+not code-signed with a trusted publisher/developer certificate, so downloaded
+builds may show the operating system's normal warning until release-signing
+credentials are configured.
 
 ## File Locations
 
@@ -27,17 +36,18 @@ Files are copied here when added to the app:
 - **Linux**: `~/.cache/podcasterator/` (follows XDG Base Directory spec)
 - **Windows**: `%LOCALAPPDATA%\podcasterator\`
 
-They are deleted when cleared from the interface or when the app quits. The artwork and podcast name persist between launches unless manually cleared. 
+They are deleted when cleared from the interface or when the app quits. The artwork and podcast name persist between launches unless manually cleared.
 
-### Configuration File Location 
+### Configuration File Location
 
 - **macOS**: `~/Library/Application Support/Podcasterator/state.json`
-- **Linux**: `~/.config/Podcasterator/state.json` 
+- **Linux**: `~/.config/Podcasterator/state.json`
 - **Windows**: `%APPDATA%\Podcasterator\state.json`
 
 ## Supported Formats
 
 **Audio**: MP3, M4A, MP4, M4B (MP4/M4B auto-renamed to M4A)
+
 **Images**: PNG, JPG, JPEG, GIF, BMP, TIFF
 
 ## How It Works
