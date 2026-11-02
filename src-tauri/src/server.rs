@@ -11,13 +11,14 @@ use rss::{ChannelBuilder, EnclosureBuilder, GuidBuilder, ImageBuilder, ItemBuild
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::watch;
+use tokio::sync::{watch, Semaphore};
 use tower::util::ServiceExt;
 use tower_http::services::ServeFile;
 
 pub struct ServerState {
     pub state_rx: watch::Receiver<AppState>,
     pub base_url: String,
+    pub feed_permit: Arc<Semaphore>,
 }
 
 /// Detect the local IP address (non-loopback IPv4)
@@ -38,7 +39,10 @@ fn generate_feed(app_state: &AppState, base_url: &str) -> String {
 
     for (index, file) in app_state.files.iter().enumerate() {
         let path = PathBuf::from(&file.temp_path);
-        let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let Ok(metadata) = fs::metadata(&path) else {
+            continue;
+        };
+        let file_size = metadata.len();
         let mime_type = get_mime_type(&path);
 
         // Podcast clients commonly sort items newest-first by pubDate instead
@@ -102,17 +106,35 @@ fn generate_feed(app_state: &AppState, base_url: &str) -> String {
 }
 
 /// Serve the RSS feed
-async fn feed_handler(AxumState(state): AxumState<Arc<ServerState>>) -> impl IntoResponse {
+async fn feed_handler(AxumState(state): AxumState<Arc<ServerState>>) -> Response {
+    let Ok(permit) = state.feed_permit.clone().try_acquire_owned() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Feed is busy; retry shortly",
+        )
+            .into_response();
+    };
     let app_state = state.state_rx.borrow().clone();
-    let feed = generate_feed(&app_state, &state.base_url);
-
-    (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            "application/rss+xml; charset=utf-8",
-        )],
-        feed,
-    )
+    let base_url = state.base_url.clone();
+    match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        generate_feed(&app_state, &base_url)
+    })
+    .await
+    {
+        Ok(feed) => (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "application/rss+xml; charset=utf-8",
+            )],
+            feed,
+        )
+            .into_response(),
+        Err(error) => {
+            log::error!("Feed generation failed: {error}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Feed unavailable").into_response()
+        }
+    }
 }
 
 /// Serve audio files.
@@ -193,6 +215,7 @@ pub async fn launch_server(
     let server_state = Arc::new(ServerState {
         state_rx,
         base_url: base_url.clone(),
+        feed_permit: Arc::new(Semaphore::new(1)),
     });
 
     let app = Router::new()
@@ -223,11 +246,13 @@ mod tests {
     use crate::state::{AppState, AudioFile};
     use std::io::Cursor;
 
-    fn audio_file(id: &str, name: &str, added_at: &str) -> AudioFile {
+    fn audio_file(root: &std::path::Path, id: &str, name: &str, added_at: &str) -> AudioFile {
+        let path = root.join(id);
+        std::fs::write(&path, b"fixture").unwrap();
         AudioFile {
             id: id.to_string(),
             original_path: format!("/original/{name}"),
-            temp_path: format!("/temporary/{id}/{name}"),
+            temp_path: path.to_string_lossy().into_owned(),
             display_name: name.to_string(),
             added_at: added_at.to_string(),
         }
@@ -235,11 +260,27 @@ mod tests {
 
     #[test]
     fn feed_dates_preserve_the_displayed_file_order() {
+        let root = tempfile::tempdir().unwrap();
         let state = AppState {
             files: vec![
-                audio_file("one", "Episode 01.mp3", "Wed, 01 Jul 2026 12:00:00 +0000"),
-                audio_file("two", "Episode 02.mp3", "Thu, 02 Jul 2026 12:00:00 +0000"),
-                audio_file("three", "Episode 03.mp3", "Fri, 03 Jul 2026 12:00:00 +0000"),
+                audio_file(
+                    root.path(),
+                    "one",
+                    "Episode 01.mp3",
+                    "Wed, 01 Jul 2026 12:00:00 +0000",
+                ),
+                audio_file(
+                    root.path(),
+                    "two",
+                    "Episode 02.mp3",
+                    "Thu, 02 Jul 2026 12:00:00 +0000",
+                ),
+                audio_file(
+                    root.path(),
+                    "three",
+                    "Episode 03.mp3",
+                    "Fri, 03 Jul 2026 12:00:00 +0000",
+                ),
             ],
             podcast_name: "Test Podcast".to_string(),
             artwork_path: None,
@@ -262,5 +303,52 @@ mod tests {
             .map(|item| chrono::DateTime::parse_from_rfc2822(item.pub_date().unwrap()).unwrap())
             .collect::<Vec<_>>();
         assert!(dates.windows(2).all(|pair| pair[0] > pair[1]));
+    }
+    #[tokio::test]
+    async fn feed_work_is_bounded_and_observes_updated_state() {
+        use super::*;
+        use axum::body::to_bytes;
+        let (tx, rx) = watch::channel(AppState::default());
+        let server = Arc::new(ServerState {
+            state_rx: rx,
+            base_url: "http://localhost".into(),
+            feed_permit: Arc::new(Semaphore::new(1)),
+        });
+        let permit = server.feed_permit.clone().acquire_owned().await.unwrap();
+        assert_eq!(
+            feed_handler(AxumState(server.clone())).await.status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        drop(permit);
+        let mut state = AppState::default();
+        state.podcast_name = "Updated".into();
+        tx.send(state).unwrap();
+        let response = feed_handler(AxumState(server)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 65536).await.unwrap();
+        assert!(String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("Updated"));
+    }
+
+    #[test]
+    fn missing_audio_is_excluded_from_the_feed() {
+        let root = tempfile::tempdir().unwrap();
+        let file = audio_file(
+            root.path(),
+            "missing",
+            "Gone.mp3",
+            "Wed, 01 Jul 2026 12:00:00 +0000",
+        );
+        std::fs::remove_file(&file.temp_path).unwrap();
+        let state = AppState {
+            files: vec![file],
+            ..AppState::default()
+        };
+        let xml = generate_feed(&state, "http://localhost");
+        assert!(rss::Channel::read_from(Cursor::new(xml))
+            .unwrap()
+            .items()
+            .is_empty());
     }
 }

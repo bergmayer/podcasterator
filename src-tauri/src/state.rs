@@ -35,11 +35,15 @@ impl Default for AppState {
     }
 }
 
+pub struct RunningServer {
+    pub url: String,
+    pub shutdown: tokio::sync::oneshot::Sender<()>,
+    pub state_tx: tokio::sync::watch::Sender<AppState>,
+}
+
 pub struct AppStateManager {
     pub state: AppState,
-    pub server_url: Option<String>,
-    pub server_shutdown: Option<tokio::sync::oneshot::Sender<()>>,
-    pub server_state_tx: Option<tokio::sync::watch::Sender<AppState>>,
+    pub server: Option<RunningServer>,
     cache_dir: PathBuf,
     config_dir: PathBuf,
 }
@@ -68,9 +72,7 @@ impl AppStateManager {
 
         Self {
             state,
-            server_url: None,
-            server_shutdown: None,
-            server_state_tx: None,
+            server: None,
             cache_dir,
             config_dir,
         }
@@ -79,7 +81,8 @@ impl AppStateManager {
     fn get_directories() -> Result<(PathBuf, PathBuf), String> {
         #[cfg(target_os = "macos")]
         {
-            let home = dirs::home_dir().ok_or_else(|| "Failed to get home directory".to_string())?;
+            let home =
+                dirs::home_dir().ok_or_else(|| "Failed to get home directory".to_string())?;
             let cache = home.join("Library/Caches/podcasterator");
             let config = home.join("Library/Application Support/Podcasterator");
             Ok((cache, config))
@@ -112,8 +115,8 @@ impl AppStateManager {
         fs::write(&path, json).map_err(|e| format!("Failed to write state file: {}", e))?;
 
         // Sync to running server
-        if let Some(ref tx) = self.server_state_tx {
-            let _ = tx.send(self.state.clone());
+        if let Some(ref server) = self.server {
+            let _ = server.state_tx.send(self.state.clone());
         }
 
         Ok(())
@@ -157,7 +160,8 @@ fn load_state(path: &PathBuf, state: &mut AppState) -> Result<(), String> {
         return Ok(());
     }
 
-    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read state file: {}", e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read state file: {}", e))?;
 
     let mut loaded_state: AppState =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse state file: {}", e))?;

@@ -149,7 +149,7 @@ pub async fn set_podcast_name(
 pub async fn start_server(state: tauri::State<'_, StateManager>) -> Result<String, String> {
     let mut manager = state.lock().await;
 
-    if manager.server_url.is_some() {
+    if manager.server.is_some() {
         return Err("Server is already running".to_string());
     }
 
@@ -157,9 +157,11 @@ pub async fn start_server(state: tauri::State<'_, StateManager>) -> Result<Strin
 
     let (url, shutdown_tx, state_tx) = launch_server(app_state).await?;
 
-    manager.server_url = Some(url.clone());
-    manager.server_shutdown = Some(shutdown_tx);
-    manager.server_state_tx = Some(state_tx);
+    manager.server = Some(crate::state::RunningServer {
+        url: url.clone(),
+        shutdown: shutdown_tx,
+        state_tx,
+    });
 
     Ok(url)
 }
@@ -168,19 +170,17 @@ pub async fn start_server(state: tauri::State<'_, StateManager>) -> Result<Strin
 pub async fn stop_server(state: tauri::State<'_, StateManager>) -> Result<(), String> {
     let mut manager = state.lock().await;
 
-    if let Some(shutdown_tx) = manager.server_shutdown.take() {
-        if shutdown_tx.send(()).is_err() {
+    if let Some(server) = manager.server.take() {
+        if server.shutdown.send(()).is_err() {
             log::warn!("Server shutdown receiver already dropped");
         }
     }
 
-    manager.server_url = None;
-    manager.server_state_tx = None;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn get_server_url(state: tauri::State<'_, StateManager>) -> Result<Option<String>, ()> {
     let manager = state.lock().await;
-    Ok(manager.server_url.clone())
+    Ok(manager.server.as_ref().map(|server| server.url.clone()))
 }

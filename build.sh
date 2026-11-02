@@ -242,22 +242,20 @@ fi
 
 # --- Helper: zip and move to releases ---
 
-zip_to_releases() {
-    local src="$1"
-    local zipname="$2"
+zip_to_releases() (
+    set -e
+    local src="$1" zipname="$2"
+    [[ -e "$src" ]] || { echo "Missing package input: $src" >&2; exit 1; }
     mkdir -p "$RELEASES_DIR"
-    if [ -d "$src" ]; then
-        (cd "$(dirname "$src")" && zip -r "$RELEASES_DIR/$zipname" "$(basename "$src")")
-        rm -rf "$src"
-        echo "  Created releases/$zipname"
-    elif [ -f "$src" ]; then
-        (cd "$(dirname "$src")" && zip "$RELEASES_DIR/$zipname" "$(basename "$src")")
-        rm -f "$src"
-        echo "  Created releases/$zipname"
-    else
-        echo "  Warning: could not find $src"
-    fi
-}
+    local staging
+    staging=$(mktemp -d "$RELEASES_DIR/.package.XXXXXX")
+    trap 'rm -rf "$staging"' EXIT
+    (cd "$(dirname "$src")" && zip -r "$staging/package.zip" "$(basename "$src")")
+    unzip -tq "$staging/package.zip"
+    mv -f "$staging/package.zip" "$RELEASES_DIR/$zipname"
+    rm -rf "$src"
+    echo "  Created releases/$zipname"
+)
 
 # --- Native package build ---
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-  import { serverUrl, isServerRunning, startServer, stopServer } from "../stores/app";
+  import { serverUrl, isServerRunning, isServerBusy, startServer, stopServer } from "../stores/app";
 
   let copyStatus = $state<"idle" | "copied" | "failed">("idle");
   let copyTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -36,14 +36,14 @@
 
 <div class="server-controls">
   {#if $isServerRunning}
-    <button class="danger" onclick={stopServer}>Stop Server</button>
+    <button class="danger" onclick={stopServer} disabled={$isServerBusy}>Stop Server</button>
 
     <div class="url-container">
       <span class="url">{$serverUrl}</span>
       <button onclick={copyUrl}>{getCopyButtonText()}</button>
     </div>
   {:else}
-    <button class="primary" onclick={startServer}>
+    <button class="primary" onclick={startServer} disabled={$isServerBusy}>
       Launch Local Podcast Server
     </button>
   {/if}

@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { writable, derived, get } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface AudioFile {
@@ -21,8 +21,15 @@ export const appState = writable<AppState>({
   artwork_path: null,
 });
 
-export const serverUrl = writable<string | null>(null);
-export const isServerRunning = writable(false);
+export type ServerState =
+  | { phase: "stopped" }
+  | { phase: "starting" }
+  | { phase: "running"; url: string }
+  | { phase: "stopping"; url: string };
+export const serverState = writable<ServerState>({ phase: "stopped" });
+export const serverUrl = derived(serverState, (state) => "url" in state ? state.url : null);
+export const isServerRunning = derived(serverState, (state) => state.phase === "running" || state.phase === "stopping");
+export const isServerBusy = derived(serverState, (state) => state.phase === "starting" || state.phase === "stopping");
 export const lastError = writable<string | null>(null);
 
 let errorTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -54,13 +61,14 @@ async function invokeAndSync(
 
 export async function loadState(): Promise<void> {
   try {
-    const state = await invoke<AppState>("get_state");
+    const initial = get(serverState);
+    const [state, url] = await Promise.all([
+      invoke<AppState>("get_state"),
+      invoke<string | null>("get_server_url"),
+    ]);
     appState.set(state);
-
-    const url = await invoke<string | null>("get_server_url");
-    if (url) {
-      serverUrl.set(url);
-      isServerRunning.set(true);
+    if (get(serverState) === initial) {
+      serverState.set(url ? { phase: "running", url } : { phase: "stopped" });
     }
   } catch (e) {
     console.error("Failed to load state:", e);
@@ -115,22 +123,27 @@ export async function setPodcastName(name: string): Promise<void> {
 }
 
 export async function startServer(): Promise<void> {
+  if (get(serverState).phase !== "stopped") return;
+  serverState.set({ phase: "starting" });
   try {
     const url = await invoke<string>("start_server");
-    serverUrl.set(url);
-    isServerRunning.set(true);
+    serverState.set({ phase: "running", url });
   } catch (e) {
+    serverState.set({ phase: "stopped" });
     console.error("Failed to start server:", e);
     showError(typeof e === "string" ? e : "Failed to start server");
   }
 }
 
 export async function stopServer(): Promise<void> {
+  const current = get(serverState);
+  if (current.phase !== "running") return;
+  serverState.set({ phase: "stopping", url: current.url });
   try {
     await invoke("stop_server");
-    serverUrl.set(null);
-    isServerRunning.set(false);
+    serverState.set({ phase: "stopped" });
   } catch (e) {
+    serverState.set(current);
     console.error("Failed to stop server:", e);
     showError(typeof e === "string" ? e : "Failed to stop server");
   }
